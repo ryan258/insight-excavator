@@ -10,6 +10,7 @@ import random
 import re
 import time
 import urllib.request
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -64,7 +65,9 @@ def classify(text):
 
 
 def save_source(text, tag, label):
-    name = f"{int(time.time() * 1000)}.txt"
+    # timestamp keeps files chronologically sortable; uuid suffix prevents
+    # same-millisecond collisions under the threaded server
+    name = f"{int(time.time() * 1000)}-{uuid.uuid4().hex[:6]}.txt"
     (SOURCES / name).write_text(f"tag: {tag}\nlabel: {label}\n---\n{text}")
     return name
 
@@ -83,18 +86,31 @@ def load_source(name):
     }
 
 
-def pick_pair():
-    by_tag = {}
+def by_tag():
+    groups = {}
     for f in SOURCES.glob("*.txt"):
         s = load_source(f.name)
-        by_tag.setdefault(s["tag"], []).append(s)
-    tags = [t for t in by_tag if by_tag[t]]
+        groups.setdefault(s["tag"], []).append(s)
+    return groups
+
+
+def pick_pair():
+    groups = by_tag()
+    tags = list(groups)
     if len(tags) < 2:
         raise RuntimeError(
             "Need saved sources in at least 2 different tags before digging."
         )
     t1, t2 = random.sample(tags, 2)
-    return random.choice(by_tag[t1]), random.choice(by_tag[t2])
+    return random.choice(groups[t1]), random.choice(groups[t2])
+
+
+def pick_third(exclude_tags):
+    groups = by_tag()
+    tags = [t for t in groups if t not in exclude_tags]
+    if not tags:
+        raise RuntimeError("No sources outside the original pair's tags to chain against.")
+    return random.choice(groups[random.choice(tags)])
 
 
 # ---------- the digging loop ----------
@@ -107,7 +123,7 @@ def dig(a, b):
         f"THING 1 ({a['tag']} — {a['label']}):\n{a['text']}\n\n"
         f"THING 2 ({b['tag']} — {b['label']}):\n{b['text']}"
     )
-    score = 0
+    score = None
     for attempt in range(3):
         judge = ai(
             "Score this insight 1 to 10 on novelty. If it scores below 7, "
@@ -119,14 +135,57 @@ def dig(a, b):
             f"INSIGHT:\n{insight}"
         )
         m = re.search(r"SCORE:\s*(\d+)", judge)
-        score = int(m.group(1)) if m else 7  # ponytail: unparseable score counts as a pass
-        if score >= 7 or attempt == 2:
+        # None means the model didn't follow the format or gave an out-of-range
+        # number; shown as unscored rather than faked
+        n = int(m.group(1)) if m else None
+        score = n if n is not None and 1 <= n <= 10 else None
+        if (score is not None and score >= 7) or attempt == 2:
             break
         rm = re.search(r"REPLACEMENT:\s*(.+)", judge, re.S)
         rep = rm.group(1).strip() if rm else ""
         if rep and rep.upper() != "NONE":
             insight = rep
     return insight, score
+
+
+GATES = [
+    ("REVEAL", "does it expose the lie of unlimited capacity?"),
+    ("BUILD", "does it create proof, practice, or capacity?"),
+    ("DELIVER", "does it respect the bandwidth?"),
+]
+
+
+def run_filter(insight):
+    gate_lines = "\n".join(f"{name} — {q}" for name, q in GATES)
+    out = ai(
+        "Run this insight through a three-gate filter. For each gate answer "
+        "PASS or FAIL with one short reason.\n\n"
+        f"Gates:\n{gate_lines}\n\n"
+        "Reply in exactly this format, one line per gate:\n"
+        "REVEAL: PASS or FAIL — <one-line reason>\n"
+        "BUILD: PASS or FAIL — <one-line reason>\n"
+        "DELIVER: PASS or FAIL — <one-line reason>\n\n"
+        f"INSIGHT:\n{insight}"
+    )
+    results = []
+    for name, _ in GATES:
+        m = re.search(rf"{name}:\s*(PASS|FAIL)\s*[—:-]*\s*(.*)", out)
+        results.append({
+            "gate": name,
+            "verdict": m.group(1) if m else "?",
+            "why": m.group(2).strip() if m else "could not parse filter output",
+        })
+    return results
+
+
+def keep(insight, score, pair):
+    score_str = f"{score}/10" if score is not None else "unscored"
+    # escape leading '#'s so model text can't be mistaken for a new record
+    # header by a future digest parser that splits keepers.md on "^## "
+    safe_insight = re.sub(r"(?m)^#", r"\\#", insight)
+    entry = f"## {time.strftime('%Y-%m-%d')} — {score_str} — {pair}\n\n{safe_insight}\n\n"
+    with open(ROOT / "keepers.md", "a") as f:
+        f.write(entry)
 
 
 # ---------- http ----------
@@ -152,6 +211,14 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "not found"}, 404)
 
     def do_POST(self):
+        # a browser sets Origin on every cross-site fetch/form POST; curl and
+        # same-origin page requests don't send a mismatched one, so this blocks
+        # a malicious page's script from silently POSTing here while leaving
+        # documented curl usage untouched
+        origin = self.headers.get("Origin")
+        if origin and origin not in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"):
+            self._json({"error": "cross-origin requests are not allowed"}, 403)
+            return
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length)) if length else {}
@@ -182,6 +249,24 @@ class Handler(BaseHTTPRequestHandler):
                 b = load_source(body["b"])
                 insight, score = dig(a, b)
                 self._json({"insight": insight, "score": score})
+            elif self.path == "/api/chain":
+                c = pick_third(body.get("exclude", []))
+                seed = {
+                    "tag": "insight",
+                    "label": "a previously dug insight",
+                    "text": body["insight"],
+                }
+                insight, score = dig(seed, c)
+                self._json({
+                    "insight": insight,
+                    "score": score,
+                    "source": {k: c[k] for k in ("file", "tag", "label")},
+                })
+            elif self.path == "/api/filter":
+                self._json({"gates": run_filter(body["insight"])})
+            elif self.path == "/api/keep":
+                keep(body["insight"], body["score"], body["pair"])
+                self._json({"ok": True})
             else:
                 self._json({"error": "not found"}, 404)
         except Exception as e:  # surface everything to the UI

@@ -14,8 +14,8 @@
     background: #fdfcfa;
   }
   h1 { font-size: 2.2rem; margin: 0 0 3rem; }
-  h2 { font-size: 1.1rem; text-transform: uppercase; letter-spacing: .08em;
-       color: #888; font-family: system-ui, sans-serif; margin: 3.5rem 0 1rem; }
+  h2, h2 label { font-size: 1.1rem; text-transform: uppercase; letter-spacing: .08em;
+       color: #5b5b5b; font-family: system-ui, sans-serif; margin: 3.5rem 0 1rem; }
   textarea {
     width: 100%; min-height: 160px; font: inherit; font-size: 18px;
     padding: 1rem; border: 1px solid #ccc; border-radius: 8px; background: #fff;
@@ -42,24 +42,31 @@
   .score { font-family: system-ui, sans-serif; font-weight: 700; font-size: 15px;
            color: #6b5d43; margin-bottom: .8rem; }
   .insight { white-space: pre-wrap; }
-  .muted { color: #999; }
+  .muted { color: #666; }
   .error { color: #a33; font-family: system-ui, sans-serif; font-size: 16px; }
+  .gate { font-family: system-ui, sans-serif; font-size: 16px; margin-top: .5rem; }
+  .acts button { margin-right: .6rem; }
 </style>
 </head>
 <body>
+<main>
 <h1>Idea Digger</h1>
 
-<h2>Add a source</h2>
+<h2><label for="text">Add a source</label></h2>
 <textarea id="text" placeholder="Paste any text source…"></textarea>
 <button id="save">Save</button>
-<div id="saveResult"></div>
+<div id="saveResult" aria-live="polite"></div>
 
 <h2>Dig</h2>
 <button id="dig">Dig</button>
-<div id="digResult"></div>
+<div id="digResult" aria-live="polite"></div>
+</main>
 
 <script>
 const $ = id => document.getElementById(id);
+
+// All model-generated text (labels, insights, gate reasons, errors) is rendered
+// via textContent / DOM nodes — never string-interpolated into innerHTML.
 
 async function api(path, body) {
   const r = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -69,51 +76,158 @@ async function api(path, body) {
   return data;
 }
 
+function el(tag, className, text) {
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function errorCard(container, msg) {
+  container.replaceChildren(el('div', 'card error', msg));
+}
+
+// one action at a time — serializes dig/keep/chain/filter so responses
+// can't land in a card that has since been replaced
+function busy(v) {
+  for (const id of ['dig', 'save', 'keep', 'chain', 'filter']) {
+    const b = $(id);
+    if (b) b.disabled = v;
+  }
+  // an already-kept insight must not become keepable again
+  if (!v && current && current.kept && $('keep')) $('keep').disabled = true;
+}
+
+// ---------- save ----------
+
 $('save').onclick = async () => {
-  const btn = $('save'); btn.disabled = true;
-  $('saveResult').innerHTML = '<div class="card muted">Tagging…</div>';
+  busy(true);
+  $('saveResult').replaceChildren(el('div', 'card muted', 'Tagging…'));
   try {
     const d = await api('/api/save', {text: $('text').value});
     $('text').value = '';
-    const opts = d.tags.map(t =>
-      `<option ${t === d.tag ? 'selected' : ''}>${t}</option>`).join('');
-    $('saveResult').innerHTML = `
-      <div class="card">
-        Saved as <span class="label">${d.label}</span><br>
-        Tag: <select id="retag">${opts}</select>
-      </div>`;
-    $('retag').onchange = e =>
-      api('/api/retag', {file: d.file, tag: e.target.value}).catch(alert);
+    const card = el('div', 'card');
+    card.append('Saved as ', el('span', 'label', d.label), document.createElement('br'), 'Tag: ');
+    const sel = document.createElement('select');
+    sel.setAttribute('aria-label', 'Tag');
+    for (const t of d.tags) {
+      const o = el('option', '', t);
+      o.selected = t === d.tag;
+      sel.append(o);
+    }
+    sel.onchange = () => api('/api/retag', {file: d.file, tag: sel.value})
+      .catch(e => alert(e.message));
+    card.append(sel);
+    $('saveResult').replaceChildren(card);
   } catch (e) {
-    $('saveResult').innerHTML = `<div class="card error">${e.message}</div>`;
+    errorCard($('saveResult'), e.message);
   }
-  btn.disabled = false;
+  busy(false);
 };
 
+// ---------- dig / keep / chain / filter ----------
+
+let current = null; // {insight, score, tags, pair}
+
+function sourceChip(s) {
+  const div = document.createElement('div');
+  div.append(el('span', 'tagchip', s.tag), document.createElement('br'),
+             el('span', 'label', s.label));
+  return div;
+}
+
+// build the card: sources shown first, insight arrives later
+function showCard(sources) {
+  const card = el('div', 'card');
+  const holder = el('div', 'sources');
+  sources.forEach(s => holder.append(sourceChip(s)));
+  card.append(holder,
+              el('p', 'muted working', 'Digging…'),
+              el('div', 'islot'), el('div', 'acts'), el('div', 'extra'));
+  $('digResult').replaceChildren(card);
+  return card;
+}
+
+function showInsight(card, d) {
+  card.querySelector('.working').remove();
+  const slot = card.querySelector('.islot');
+  slot.replaceChildren(el('div', 'score', d.score == null ? 'NOVELTY — unscored' : `NOVELTY ${d.score}/10`),
+                       el('div', 'insight', d.insight));
+  const acts = card.querySelector('.acts');
+  acts.replaceChildren();
+  for (const [id, label, fn] of [['keep', 'Keep', doKeep],
+                                 ['chain', 'Chain', doChain],
+                                 ['filter', 'Filter', doFilter]]) {
+    const b = el('button', '', label);
+    b.id = id;
+    b.onclick = fn;
+    acts.append(b);
+  }
+}
+
+async function doKeep() {
+  busy(true);
+  try {
+    await api('/api/keep', {insight: current.insight, score: current.score, pair: current.pair});
+    current.kept = true;
+    $('keep').textContent = 'Kept ✓';
+  } catch (e) { alert(e.message); }
+  busy(false);
+}
+
+async function doChain() {
+  const prev = current;
+  const card = $('digResult').querySelector('.card');
+  const extra = card.querySelector('.extra');
+  busy(true);
+  extra.replaceChildren(el('p', 'muted', 'Chaining…'));
+  try {
+    const d = await api('/api/chain', {insight: prev.insight, exclude: prev.tags});
+    current = {insight: d.insight, score: d.score,
+               tags: [...prev.tags, d.source.tag],
+               pair: `${prev.pair} ⛓ ${d.source.label}`};
+    const newCard = showCard([{tag: 'insight', label: 'previous insight'}, d.source]);
+    showInsight(newCard, d);
+  } catch (e) {
+    // keep the existing insight card intact; just report the failure
+    extra.replaceChildren(el('p', 'error', e.message));
+  }
+  busy(false);
+}
+
+async function doFilter() {
+  const card = $('digResult').querySelector('.card');
+  const extra = card.querySelector('.extra');
+  busy(true);
+  extra.replaceChildren(el('p', 'muted', 'Filtering…'));
+  try {
+    const d = await api('/api/filter', {insight: current.insight});
+    extra.replaceChildren();
+    for (const g of d.gates) {
+      const div = el('div', 'gate');
+      div.append(el('b', '', `${g.verdict === 'PASS' ? '✓' : '✗'} ${g.gate}`), ` — ${g.why}`);
+      extra.append(div);
+    }
+  } catch (e) {
+    extra.replaceChildren(el('p', 'error', e.message));
+  }
+  busy(false);
+}
+
 $('dig').onclick = async () => {
-  const btn = $('dig'); btn.disabled = true;
-  $('digResult').innerHTML = '';
+  busy(true);
   try {
     const p = await api('/api/pick');
-    // show the two sources first, before the insight arrives
-    $('digResult').innerHTML = `
-      <div class="card">
-        <div class="sources">
-          <div><span class="tagchip">${p.a.tag}</span><br><span class="label">${p.a.label}</span></div>
-          <div><span class="tagchip">${p.b.tag}</span><br><span class="label">${p.b.label}</span></div>
-        </div>
-        <p class="muted" id="working">Digging…</p>
-        <div id="insightSlot"></div>
-      </div>`;
+    const card = showCard([p.a, p.b]);
     const d = await api('/api/insight', {a: p.a.file, b: p.b.file});
-    $('working').remove();
-    $('insightSlot').innerHTML =
-      `<div class="score">NOVELTY ${d.score}/10</div><div class="insight"></div>`;
-    $('insightSlot').querySelector('.insight').textContent = d.insight;
+    current = {insight: d.insight, score: d.score,
+               tags: [p.a.tag, p.b.tag],
+               pair: `${p.a.label} × ${p.b.label}`};
+    showInsight(card, d);
   } catch (e) {
-    $('digResult').innerHTML = `<div class="card error">${e.message}</div>`;
+    errorCard($('digResult'), e.message);
   }
-  btn.disabled = false;
+  busy(false);
 };
 </script>
 </body>

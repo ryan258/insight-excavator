@@ -18,7 +18,7 @@ no database. Each phase ships something usable on its own and has a "done when" 
 
 ---
 
-## Phase 1 — The promised extras
+## Phase 1 — The promised extras ✅ (shipped)
 
 The three features specced but deferred until the core loop proved out.
 
@@ -34,7 +34,7 @@ The three features specced but deferred until the core loop proved out.
    - DELIVER: does it respect the bandwidth?
 
 **Done when:** dig → keep → chain → filter works as one flow and `keepers.md` reads
-like a usable idea log.
+like a usable idea log. ✅ Verified live 2026-07-19.
 
 ---
 
