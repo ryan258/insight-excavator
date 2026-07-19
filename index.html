@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Idea Digger</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 20px; line-height: 1.6; color: #222;
+    max-width: 720px; margin: 0 auto; padding: 4rem 1.5rem 6rem;
+    background: #fdfcfa;
+  }
+  h1 { font-size: 2.2rem; margin: 0 0 3rem; }
+  h2 { font-size: 1.1rem; text-transform: uppercase; letter-spacing: .08em;
+       color: #888; font-family: system-ui, sans-serif; margin: 3.5rem 0 1rem; }
+  textarea {
+    width: 100%; min-height: 160px; font: inherit; font-size: 18px;
+    padding: 1rem; border: 1px solid #ccc; border-radius: 8px; background: #fff;
+  }
+  button {
+    font-family: system-ui, sans-serif; font-size: 18px; padding: .7rem 1.6rem;
+    border: none; border-radius: 8px; background: #222; color: #fff;
+    cursor: pointer; margin-top: 1rem;
+  }
+  button:disabled { opacity: .4; cursor: wait; }
+  #dig { font-size: 24px; padding: 1rem 3rem; display: block; margin: 1rem auto; }
+  select { font: inherit; font-size: 16px; padding: .3rem; }
+  .card {
+    background: #fff; border: 1px solid #e2ddd4; border-radius: 12px;
+    padding: 1.8rem; margin-top: 1.5rem;
+  }
+  .tagchip {
+    display: inline-block; font-family: system-ui, sans-serif; font-size: 14px;
+    background: #ede8df; border-radius: 999px; padding: .2rem .9rem; margin-right: .5rem;
+  }
+  .sources { display: flex; gap: 1rem; }
+  .sources > div { flex: 1; }
+  .label { font-style: italic; }
+  .score { font-family: system-ui, sans-serif; font-weight: 700; font-size: 15px;
+           color: #6b5d43; margin-bottom: .8rem; }
+  .insight { white-space: pre-wrap; }
+  .muted { color: #999; }
+  .error { color: #a33; font-family: system-ui, sans-serif; font-size: 16px; }
+</style>
+</head>
+<body>
+<h1>Idea Digger</h1>
+
+<h2>Add a source</h2>
+<textarea id="text" placeholder="Paste any text source…"></textarea>
+<button id="save">Save</button>
+<div id="saveResult"></div>
+
+<h2>Dig</h2>
+<button id="dig">Dig</button>
+<div id="digResult"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+async function api(path, body) {
+  const r = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'},
+                              body: JSON.stringify(body || {})});
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+$('save').onclick = async () => {
+  const btn = $('save'); btn.disabled = true;
+  $('saveResult').innerHTML = '<div class="card muted">Tagging…</div>';
+  try {
+    const d = await api('/api/save', {text: $('text').value});
+    $('text').value = '';
+    const opts = d.tags.map(t =>
+      `<option ${t === d.tag ? 'selected' : ''}>${t}</option>`).join('');
+    $('saveResult').innerHTML = `
+      <div class="card">
+        Saved as <span class="label">${d.label}</span><br>
+        Tag: <select id="retag">${opts}</select>
+      </div>`;
+    $('retag').onchange = e =>
+      api('/api/retag', {file: d.file, tag: e.target.value}).catch(alert);
+  } catch (e) {
+    $('saveResult').innerHTML = `<div class="card error">${e.message}</div>`;
+  }
+  btn.disabled = false;
+};
+
+$('dig').onclick = async () => {
+  const btn = $('dig'); btn.disabled = true;
+  $('digResult').innerHTML = '';
+  try {
+    const p = await api('/api/pick');
+    // show the two sources first, before the insight arrives
+    $('digResult').innerHTML = `
+      <div class="card">
+        <div class="sources">
+          <div><span class="tagchip">${p.a.tag}</span><br><span class="label">${p.a.label}</span></div>
+          <div><span class="tagchip">${p.b.tag}</span><br><span class="label">${p.b.label}</span></div>
+        </div>
+        <p class="muted" id="working">Digging…</p>
+        <div id="insightSlot"></div>
+      </div>`;
+    const d = await api('/api/insight', {a: p.a.file, b: p.b.file});
+    $('working').remove();
+    $('insightSlot').innerHTML =
+      `<div class="score">NOVELTY ${d.score}/10</div><div class="insight"></div>`;
+    $('insightSlot').querySelector('.insight').textContent = d.insight;
+  } catch (e) {
+    $('digResult').innerHTML = `<div class="card error">${e.message}</div>`;
+  }
+  btn.disabled = false;
+};
+</script>
+</body>
+</html>

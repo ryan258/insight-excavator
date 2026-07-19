@@ -1,0 +1,4 @@
+tag: creative-projects
+label: CEO Botsly workplace comedy
+---
+The CEO is a Bot: workplace comedy strip set at ByteWorks, a tech company whose CEO Botsly is a literal AI robot who takes every corporate cliche literally. Weekly 4-panel strips about employees navigating absurd machine-logic management.

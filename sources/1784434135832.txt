@@ -1,0 +1,4 @@
+tag: content-topics
+label: Honest bandwidth planner
+---
+AI daily planning tools: most productivity apps assume you have 8 productive hours a day. Real people with jobs, kids, and fatigue have maybe 2. Content angle: what would a planner look like if it was honest about your actual bandwidth? The Bandwidth Snapshot is my answer - plan the day around the 2 real hours, not the fantasy 8.

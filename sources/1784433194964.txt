@@ -1,0 +1,4 @@
+tag: brand-frameworks
+label: Constraint-driven system design
+---
+Constraint-driven design: the idea that limited bandwidth is not a weakness to overcome but the core design input. Every system I build starts from what I cannot do, not what I wish I could do. The three gates: REVEAL the lie of unlimited capacity, BUILD proof and practice, DELIVER within the bandwidth.
