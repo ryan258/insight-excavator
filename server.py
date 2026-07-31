@@ -27,7 +27,7 @@ def model_name():
     return os.environ.get("M") or json.loads((ROOT / "config.json").read_text())["model"]
 
 
-def ai(prompt):
+def ai(prompt, tries=3):
     req = urllib.request.Request(
         "https://openrouter.ai/api/v1/chat/completions",
         data=json.dumps(
@@ -38,20 +38,31 @@ def ai(prompt):
             "Content-Type": "application/json",
         },
     )
-    try:
-        with urllib.request.urlopen(req, timeout=180) as r:
-            data = json.loads(r.read())
-    except urllib.error.HTTPError as e:
-        err_body = e.read().decode("utf-8", errors="ignore")
+    for attempt in range(tries):
         try:
-            err_json = json.loads(err_body)
-            msg = err_json.get("error", {}).get("message", err_body)
-        except Exception:
-            msg = err_body
-        raise RuntimeError(f"OpenRouter HTTP {e.code}: {msg}")
-    if "choices" not in data:
-        raise RuntimeError(f"OpenRouter error: {data.get('error', data)}")
-    return data["choices"][0]["message"]["content"].strip()
+            with urllib.request.urlopen(req, timeout=180) as r:
+                data = json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="ignore")
+            try:
+                err_json = json.loads(err_body)
+                msg = err_json.get("error", {}).get("message", err_body)
+            except Exception:
+                msg = err_body
+            raise RuntimeError(f"OpenRouter HTTP {e.code}: {msg}")
+        if "choices" not in data:
+            raise RuntimeError(f"OpenRouter error: {data.get('error', data)}")
+        choice = data["choices"][0]
+        text = (choice.get("message") or {}).get("content")
+        # A 200 with content:null is a real and frequent response (~1 call in 10
+        # on some models) — reasoning-only output, content filtering, truncation.
+        # Transient, so retry; an unguarded null used to abort the whole run.
+        if text is not None:
+            return text.strip()
+        last = choice.get("finish_reason")
+    raise RuntimeError(
+        f"OpenRouter returned no content after {tries} tries (finish_reason={last})"
+    )
 
 
 # ---------- sources ----------
