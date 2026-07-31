@@ -27,6 +27,7 @@ import server  # noqa: E402  — reuse ai(), TAGS, and the OpenRouter plumbing
 
 ROOT = Path(__file__).parent
 SEEN_LOG = ROOT / "import-seen.log"
+TECH_LOG = ROOT / "import-technique.log"  # --technique pass, separate verdict space
 DOWNLOADS = Path.home() / "Downloads"
 # The zip names are swapped in the export itself; this is not a typo.
 CHATGPT_ZIP = DOWNLOADS / "rlwd--claude.zip"
@@ -80,6 +81,49 @@ something the user did not say, reply THIN instead. If DROP, reply NONE.
 # to save the classify pass was tried and reverted: it changed 6 verdicts in 60
 # against a measured self-consistency noise floor of 1 in 60, losing 4 of 13
 # keeps. Tag and label come from server.classify() on survivors instead.
+
+
+TECHNIQUE_PROMPT = """You are triaging one AI chat conversation for a vault of
+PROMPTING PRACTICE. This is a different axis from the idea filter: these
+conversations were already judged to contain no idea worth keeping. You are
+looking for something else — evidence of how this person works with AI.
+
+You will see ONLY the user's own turns. Judge only what the user actually wrote.
+What the assistant said back is not evidence and is not available to you.
+
+KEEP if the user's turns show a reusable way of working with an AI: a prompt
+structure worth repeating, a constraint or format they imposed to get a better
+answer, a role or persona they set up, a correction that redirected the model, a
+decomposition of a hard task into steps, or a stated preference about how they
+want AI output shaped. The subject matter does not matter — a prompt about
+cocktails can carry a technique worth keeping.
+
+DROP if there is no transferable method: a bare question with no shaping, a
+one-line lookup, pasted text with no instruction attached, or a request so
+specific to that moment that nothing carries over.
+
+Three traps:
+
+1. Short does not mean DROP and long does not mean KEEP. A single sentence that
+   sets up a role and a constraint is a KEEP. Three thousand words of pasted
+   article with "thoughts?" on the end is a DROP.
+2. A good *result* is not a technique. You cannot see the results. Judge only
+   the shape of what the user wrote.
+3. Do not invent the technique. If you cannot name it using what is visibly on
+   the page, that is a DROP.
+
+TITLE: {title}
+
+WHAT THE USER SAID (their turns only, in order, truncated):
+{user_text}
+
+Reply in exactly this format, nothing else:
+VERDICT: KEEP or DROP
+TECHNIQUE: if KEEP, the transferable method in one sentence, stated so it could
+be reused on an unrelated task. Use only what is present in the user's turns. If
+you cannot state it without inventing, reply THIN. If DROP, reply NONE.
+LABEL: if KEEP, four to six words naming the technique. If DROP, reply NONE.
+"""
 
 
 # ---------- reading the exports ----------
@@ -233,6 +277,25 @@ def judge(conv):
     return "KEEP", idea, tag, one_line(label, 60)
 
 
+def judge_technique(conv):
+    """-> (verdict, technique, tag, label). One call, never two.
+
+    The tag is always ai-practice, so there is nothing for classify() to decide
+    — that is the whole point of a separate pile. The label comes back in the
+    same call, so a keep costs one request instead of the idea pass's two."""
+    raw = server.ai(TECHNIQUE_PROMPT.format(
+        title=conv["title"] or "(untitled)",
+        user_text=user_text(conv),
+    ))
+    if not field(raw, "VERDICT").upper().startswith("KEEP"):
+        return "DROP", "", "", ""
+    tech = field(raw, "TECHNIQUE")
+    if not tech or tech.upper() in ("NONE", "THIN"):
+        return "THIN", "", "", ""
+    label = field(raw, "LABEL")
+    return "KEEP", tech, "ai-practice", one_line(label or conv["title"], 60)
+
+
 # ---------- writing ----------
 
 def write_source(out_dir, conv, idea, tag, label):
@@ -269,9 +332,18 @@ def main():
              "(observed 10%%, 18%%, 30%% on consecutive blocks of 40).",
     )
     ap.add_argument("--out", type=Path, default=ROOT / "sources")
-    ap.add_argument("--log", type=Path, default=SEEN_LOG)
+    ap.add_argument("--log", type=Path, default=None)
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument(
+        "--technique", action="store_true",
+        help="second pass: re-judge the conversations the idea filter DROPPED, "
+             "looking for reusable prompting practice instead of ideas. "
+             "Survivors are written as ai-practice. Uses its own log, so the "
+             "two passes never skip each other.",
+    )
     args = ap.parse_args()
+    if args.log is None:
+        args.log = TECH_LOG if args.technique else SEEN_LOG
 
     if not os.environ.get("OPENROUTER_API_KEY"):
         raise SystemExit("Set OPENROUTER_API_KEY first.")
@@ -280,9 +352,22 @@ def main():
     seen = load_seen(args.log)
     print(f"model={server.model_name()}  out={args.out}  already seen={len(seen)}")
 
+    # The technique pass only ever looks at what the idea pass threw away.
+    targets = None
+    if args.technique:
+        if not SEEN_LOG.exists():
+            raise SystemExit(f"{SEEN_LOG.name} not found — run the idea pass first.")
+        targets = {
+            p[1] for p in (l.split() for l in SEEN_LOG.read_text().splitlines())
+            if len(p) >= 3 and p[2] == "DROP"
+        }
+        print(f"technique pass over {len(targets)} conversations the idea filter dropped")
+
     pending = []
     for conv in conversations():
         if conv["id"] in seen:
+            continue
+        if targets is not None and conv["id"] not in targets:
             continue
         pending.append(conv)
         if args.limit and len(pending) >= args.limit:
@@ -293,9 +378,11 @@ def main():
     counts = {"KEEP": 0, "DROP": 0, "THIN": 0, "ERROR": 0}
     log_fp = args.log.open("a")
 
+    verdict_of = judge_technique if args.technique else judge
+
     def handle(conv):
         try:
-            verdict, idea, tag, label = judge(conv)
+            verdict, idea, tag, label = verdict_of(conv)
         except Exception as e:
             # Unlogged on purpose: an API failure should be retried next run,
             # not silently recorded as a decision about this conversation.
