@@ -4,3 +4,4 @@ sources/*txt
 __pycache__/
 *.pyc
 import-seen.log
+import-technique.log

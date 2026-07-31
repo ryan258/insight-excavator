@@ -18,7 +18,8 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 SOURCES = ROOT / "sources"
 SOURCES.mkdir(exist_ok=True)
-TAGS = ["content-topics", "brand-frameworks", "creative-projects", "essays", "other"]
+TAGS = ["content-topics", "brand-frameworks", "creative-projects", "essays",
+        "ai-practice", "other"]
 PORT = 8420
 
 
