@@ -40,37 +40,112 @@ like a usable idea log. ✅ Verified live 2026-07-19.
 
 ## Phase 2 — Feed the machine (the original mission)
 
-The tool is only as good as its corpus. Three sources of trapped ideas exist:
-ChatGPT, Claude, and Gemini chat-history exports.
+**Planning complete as of 2026-07-31. Every decision is made; what remains is
+writing one file.** Build ticket: [#8](https://github.com/ryan258/insight-excavator/issues/8).
+Map: [#1](https://github.com/ryan258/insight-excavator/issues/1).
 
-1. **Bulk import script** (`import.py`, run from CLI — not part of the web app):
-   - Parse each export format (OpenAI `conversations.json`, Claude
-     `conversations.json`, Gemini Takeout)
-   - Extract idea-bearing chunks — skip small talk, code debugging, dead threads
-   - Auto-tag + label each chunk through the existing classify step
-   - Write straight into `/sources` with a `source: chatgpt|claude|gemini` line
-     so provenance survives
-2. **Junk control:** a cheap-model pre-filter scores each chunk "is there an idea
-   here worth digging against?" before it earns a file. Bad corpus = bad digs.
-3. **Review pass:** imports land as normal sources, so the existing tag dropdown is
-   the correction tool. No new UI.
+The research lives in three documents. Read them before writing a line of
+`import.py` — between them they hold the parser, the filter prompt, and the
+reason for the file shape:
 
-**Done when:** the real exports are ingested and a dig can pair a 2024 ChatGPT idea
-with a 2026 creative project.
+- [`docs/research/export-format-anatomy.md`](docs/research/export-format-anatomy.md) — field-level anatomy of both exports (#2)
+- [`docs/research/idea-filter-sample.md`](docs/research/idea-filter-sample.md) — the filter prompt, proven on 100 hand-read conversations (#5)
+- [`docs/research/one-source-file.md`](docs/research/one-source-file.md) — what one file contains, settled with 12 real digs (#4)
+
+### The corpus
+
+Exports sit in `~/Downloads`, dated 2025-12-27. **The zip names are swapped** —
+`rlwd--claude.zip` is the ChatGPT export, `rlwd--gpt.zip` is the Claude one.
+
+| | |
+| --- | --- |
+| Conversations | 3,438 (1,338 ChatGPT + 2,100 Claude); 3,390 have extractable text |
+| Transcript after drop rules | 38,524 messages / 59.2 M chars ≈ 14.8 M tokens |
+| User turns only | 9.5 M chars — **a sixth of the corpus**, and all the filter reads |
+| Expected survivors | ~540 files at a measured 16% keep rate |
+
+**Gemini is out** — no Gemini export exists. The `drive-download-*.zip` files are
+Google Docs, not Takeout conversations. Nothing to parse.
+
+### What `import.py` does
+
+One new file, a CLI script, not part of the web app. Stdlib only.
+
+1. Stream both `conversations.json` files out of the zips — top-level JSON arrays,
+   `raw_decode` against a growing buffer, never `json.load` the whole thing.
+2. Extract messages: ChatGPT walks `parent` up from `current_node` then reverses;
+   Claude uses array order **as given** and must not be sorted. Never read
+   Claude's top-level `.text` — it is contaminated with chain-of-thought.
+3. Keep **user turns only**.
+4. Filter each conversation with prompt v2 on a cheap model. It returns a
+   keep/drop verdict *and* a one-sentence `IDEA` in the same call.
+5. Write each survivor's `IDEA` as one source file in `/sources` with the header
+   `tag`, `label`, `source`, `date`, `conv`, `title`.
+
+**One source file = one idea statement**, median ~200 chars — the same size and
+shape as the hand-written sources the app was built around, so no loader change.
+The statement is free: it falls out of the filter call, so there is **no second
+AI pass over the corpus**.
+
+**Name files by conversation id, never by title.** 145 conversations share 38
+titles; `New chat` appears 54 times and 13 titles are empty.
+
+**Make it resumable.** A 3,438-call pass will be interrupted. Write files as you
+go and skip ids already present — that also gives re-import dedup for free.
+
+### Settled deliberately, don't re-open
+
+- **Ingest the Dec-2025 exports as they are** (#3). A fresh export later is an
+  id-keyed upsert, not a blocker. Cost: a seven-month hole at the recent end.
+- **Drop Claude's `attachments[].extracted_content`** for this first ingest —
+  +22.7 M chars (+59%) of mostly pasted code and documents.
+- **The filter drops user-authored specs brought for reaction.** Known, accepted,
+  costs recall in the safe direction. A v3 prompt tried to fix it and regressed
+  keeps 3 → 1 — **do not retry that approach** (#5 §4).
+- **Review pass:** imports land as normal sources, so the existing tag dropdown is
+  the correction tool. No new UI. ~540 files rather than 3,438 may bring this back
+  inside what a dropdown can handle.
+
+### Still open
+
+- **A classify pass over the ~540 survivors.** The filter assigns no `tag` — that
+  still runs through the existing classify step, ~540 calls, and may want a
+  different model than the filter.
+- **Whether ~540 files is enough corpus.** The 1:1 conversation→statement ratio is
+  by construction, not because 1:1 is right; a conversation holding three distinct
+  ideas yields one file. If it reads thin, let the filter emit several statements
+  per conversation — still no second pass.
+
+**Done when:** the real exports are ingested, a re-run adds nothing and crashes on
+nothing, and a dig can pair a 2024 ChatGPT idea with a 2026 creative project.
 
 ---
 
 ## Phase 3 — Smarter digging
 
-Only matters once the corpus is big (post Phase 2).
+Only matters once the corpus is big (post Phase 2). Phase 2's research turned up
+two defects that land here — both will be visible on the first ingest, and
+neither is a bug in `import.py`.
 
+0. **Fix `pick_pair()`'s uniform tag sampling.** `random.sample(tags, 2)` draws
+   *tags*, then one source within the chosen tag — so a tag holding 5 sources is
+   drawn as often as one holding 2,000. Once ~540 imported files land in seven
+   tags, the five existing hand-written sources will be dug hundreds of times more
+   often than any imported one. This is now the first thing to fix, not the third.
 1. **No repeat pairs** — log dug pairs to `dug.log`; picker skips already-dug combos
    until all are exhausted.
 2. **Dig against this** — pick one specific source, let the tool find its partner.
 3. **Cost tiering** — cheap model for tagging/import-filtering, strong model for
    digging and scoring. Two model fields in `config.json`.
+   `claude-haiku-4.5` is proven adequate for the filter (#5).
+4. **Revisit `dig()`'s retry budget.** It retries up to three times whenever the
+   novelty score is under 7. All twelve digs measured in #4 scored 5–8 and the
+   judge never went below 5, so most digs burn the full budget and still return a
+   5 or 6 — three extra calls to move one point. Either the judge needs
+   recalibrating or the threshold does.
 
-**Done when:** 50 digs in a row produce no repeated pair and tagging costs pennies.
+**Done when:** 50 digs in a row produce no repeated pair, no source is drawn
+wildly more often than another, and tagging costs pennies.
 
 ---
 
@@ -98,3 +173,13 @@ Insights are only useful if they leave the tool.
 
 Phase 1 → Phase 2 → use it for a couple of weeks → let real usage decide whether
 Phase 3 or Phase 4 matters more.
+
+**Next action:** [#8](https://github.com/ryan258/insight-excavator/issues/8) — write
+`import.py` and run the first ingest. Phase 2 planning is done; nothing blocks it.
+
+One caveat for whoever picks this up: `config.json` moved from
+`inclusionai/ring-2.6-1t` to `google/gemma-4-26b-a4b-it` on 2026-07-31. The 12
+digs behind Phase 2's file-shape decision, and the ~1-in-10 null-content rate
+behind the `ai()` retry (#7), were both measured on the *old* model. The
+conclusions hold — the file shape won on cost as much as on score, and the null
+guard is cheap insurance — but the numbers behind them are model-specific.
