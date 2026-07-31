@@ -1,1 +1,5 @@
 .env
+sources/*txt
+
+__pycache__/
+*.pyc

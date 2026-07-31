@@ -9,6 +9,7 @@ import os
 import random
 import re
 import time
+import urllib.error
 import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -37,8 +38,17 @@ def ai(prompt):
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=180) as r:
-        data = json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req, timeout=180) as r:
+            data = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="ignore")
+        try:
+            err_json = json.loads(err_body)
+            msg = err_json.get("error", {}).get("message", err_body)
+        except Exception:
+            msg = err_body
+        raise RuntimeError(f"OpenRouter HTTP {e.code}: {msg}")
     if "choices" not in data:
         raise RuntimeError(f"OpenRouter error: {data.get('error', data)}")
     return data["choices"][0]["message"]["content"].strip()
