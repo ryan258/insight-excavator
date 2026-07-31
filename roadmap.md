@@ -106,18 +106,38 @@ go and skip ids already present — that also gives re-import dedup for free.
   the correction tool. No new UI. ~540 files rather than 3,438 may bring this back
   inside what a dropdown can handle.
 
+### Settled during the build
+
+- **The classify pass stays a separate call**, on survivors only (~540, not 3,390).
+  Folding `TAG`/`LABEL` into the filter call to avoid it was tried and reverted:
+  it changed 6 verdicts in 60, against a measured self-consistency noise floor of
+  1 in 60, and cost 4 of 13 keeps. **Do not edit the filter prompt** — it is the
+  one measured at 39/40, and any change moves the verdicts.
+- **The filter is stochastic.** v2 disagrees with *itself* about 1 time in 60, so
+  read #5's "39/40" as carrying roughly ±1 of run-to-run noise.
+
 ### Still open
 
-- **A classify pass over the ~540 survivors.** The filter assigns no `tag` — that
-  still runs through the existing classify step, ~540 calls, and may want a
-  different model than the filter.
 - **Whether ~540 files is enough corpus.** The 1:1 conversation→statement ratio is
   by construction, not because 1:1 is right; a conversation holding three distinct
   ideas yields one file. If it reads thin, let the filter emit several statements
-  per conversation — still no second pass.
+  per conversation — still no second pass. Only the full run answers this.
 
 **Done when:** the real exports are ingested, a re-run adds nothing and crashes on
 nothing, and a dig can pair a 2024 ChatGPT idea with a 2026 creative project.
+
+**Status:** `import.py` is written, tested, and verified on 90 real conversations
+(20 files, no double-processing, a dig across two imported sources scored 8).
+**The full ingest has not been run** — that is the one remaining step, and it is
+just:
+
+```
+M=anthropic/claude-haiku-4.5 OPENROUTER_API_KEY=... python3 import.py
+```
+
+`--limit N` takes a contiguous block in export order, not a random sample — idea
+density is clumpy (consecutive blocks of 40 ran 10%, 18%, 30%), so a trial run's
+keep rate says little about the corpus.
 
 ---
 
