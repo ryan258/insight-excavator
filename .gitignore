@@ -2,4 +2,5 @@
 sources/*txt
 
 __pycache__/
-*.pycimport-seen.log
+*.pyc
+import-seen.log
