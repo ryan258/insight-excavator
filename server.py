@@ -39,6 +39,7 @@ def ai(prompt, tries=3):
             "Content-Type": "application/json",
         },
     )
+    last = None
     for attempt in range(tries):
         try:
             with urllib.request.urlopen(req, timeout=180) as r:
@@ -52,7 +53,17 @@ def ai(prompt, tries=3):
                 msg = err_body
             raise RuntimeError(f"OpenRouter HTTP {e.code}: {msg}")
         if "choices" not in data:
-            raise RuntimeError(f"OpenRouter error: {data.get('error', data)}")
+            # A 200 carrying an error body instead of choices. Free-tier
+            # upstreams do this constantly (504 idle timeout, 429 rate limit)
+            # and it is transient — but 4xx like 402 out-of-credits will never
+            # succeed on a retry, so only back off on 5xx and 429.
+            err = data.get("error", data)
+            code = err.get("code") if isinstance(err, dict) else None
+            if isinstance(code, int) and (code >= 500 or code == 429) \
+                    and attempt < tries - 1:
+                time.sleep(2 ** attempt)
+                continue
+            raise RuntimeError(f"OpenRouter error: {err}")
         choice = data["choices"][0]
         text = (choice.get("message") or {}).get("content")
         # A 200 with content:null is a real and frequent response (~1 call in 10
