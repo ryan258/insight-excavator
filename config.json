@@ -1,4 +1,4 @@
 {
-  "model": "nvidia/nemotron-nano-12b-v2-vl:free",
+  "model": "deepseek/deepseek-v4-flash-0731",
   "vault": "~/Projects/vaults/main-vault/insights"
 }

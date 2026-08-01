@@ -30,14 +30,28 @@ LOG = ROOT / "retag-commerce.log"
 # money as commerce, so the prompt draws that line explicitly.
 PROMPT = """Does this idea belong in a vault category called `commerce`?
 
-`commerce` means: selling a product, running a shop or storefront, print-on-demand,
-merch, Etsy/Shopify listings, pricing a thing you make, product-market fit for a
-specific product, packaging or positioning something for sale.
+`commerce` means PHYSICAL GOODS YOU SELL: running a shop or storefront,
+print-on-demand, merch, apparel, prints, ceramics, Etsy/Shopify listings, a product
+brand or line, pricing or positioning a physical thing you make.
 
 It does NOT mean: business strategy in the abstract, marketing theory, career or
 freelance advice, productivity, or any idea that merely mentions money, clients,
 or customers in passing. The test is whether there is a PRODUCT BEING SOLD at the
 centre of the idea.
+
+CRITICAL — fiction is never commerce. If the idea is a story, comedy, sitcom,
+sketch, character, joke, or premise, answer NO no matter how much buying, selling,
+shopping, or business it contains. A comedy about running an Etsy shop is a STORY,
+not commerce. A realtor selling a haunted house is a STORY. A ghost cursing a
+garage sale is a STORY. The selling is the plot, not the point.
+
+CRITICAL — software is never commerce. An app, tool, script, dashboard, website,
+game, or AI agent is a CREATIVE PROJECT, not commerce, even when it is a product
+someone could charge for, and even when it helps run a shop. A dashboard tracking
+card prices is software. A tool that automates Etsy listings is software. A card
+game is a game. Answer NO for all of them.
+
+Answer YES only when there is a PHYSICAL THING being sold to real customers.
 
 Answer with exactly one word, YES or NO.
 
