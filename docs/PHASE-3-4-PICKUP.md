@@ -11,7 +11,8 @@ Read `roadmap.md` first for the *why*; this file is the *how/where*.
   Routes live in `Handler.do_POST` as a flat if/elif chain.
 - `index.html` — one page, vanilla JS, `api(path, body)` helper, `current` object
   holds the active insight `{insight, score, tags, pair}`.
-- State on disk only: `sources/*.txt` (tag/label header + text), `keepers.md`.
+- State on disk only: `sources/*.txt` (tag/label header + text), plus one Obsidian
+  note per kept insight in `<vault>/insights/` (`vault` in `config.json`).
 - Model comes from `M` env var or `config.json`, re-read per call.
 
 **Prerequisite check:** Phase 2 (`import.py`, bulk chat-export ingestion) should be
@@ -19,6 +20,11 @@ done before Phase 3 matters — repeat-pair avoidance is pointless with a dozen 
 If Phase 2 hasn't happened, do it first; its spec is in `roadmap.md`.
 
 ## Phase 3 — Smarter digging
+
+0. **Tag-weighted sampling** ✅ *(done 2026-07-31, issue #10)* — `pick_pair()` and
+   `pick_third()` draw tags weighted by `sqrt(tag size)` instead of uniformly. Read
+   the docstring on `two_tags()` before touching either; the naive fixes in both
+   directions are worse. Check: `python3 test_keep.py`.
 
 1. **No repeat pairs**
    - Append `"{a_file}|{b_file}"` (sorted) to `dug.log` at the end of `/api/insight`.
@@ -40,10 +46,11 @@ If Phase 2 hasn't happened, do it first; its spec is in `roadmap.md`.
 ## Phase 4 — Output pipeline
 
 1. **Weekly digest**
-   - Standalone `digest.py` (CLI, not a server route). Reads `keepers.md`, one AI
+   - Standalone `digest.py` (CLI, not a server route). Reads the vault's insight notes, one AI
      call: "group these kept insights by theme; what does Ryan keep circling;
      what's ready to make." Writes `digest-YYYY-MM-DD.md`.
-   - `keepers.md` entries are `## date — score/10 — pair` + body; split on `^## `.
+   - Each note is YAML frontmatter (`date`, `score`, `tags`) + body + a `Dug from`
+     line; parse the frontmatter or just concatenate the bodies.
 2. **Brand-voice handoff**
    - Manual first: the digest ends with a "ready to make" list Ryan copies into
      his brand-voice workflow (a Claude Code skill: `/brand-voice`).

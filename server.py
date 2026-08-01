@@ -23,9 +23,19 @@ TAGS = ["content-topics", "brand-frameworks", "creative-projects", "essays",
 PORT = 8420
 
 
+def config():
+    # re-read each call so edits need no restart
+    return json.loads((ROOT / "config.json").read_text())
+
+
 def model_name():
-    # env var M wins, else config.json — re-read each call so swaps need no restart
-    return os.environ.get("M") or json.loads((ROOT / "config.json").read_text())["model"]
+    # env var M wins, else config.json
+    return os.environ.get("M") or config()["model"]
+
+
+def vault_dir():
+    """Where kept insights land — one note per insight, for Obsidian."""
+    return Path(config()["vault"]).expanduser()
 
 
 def ai(prompt, tries=3):
@@ -127,23 +137,40 @@ def by_tag():
     return groups
 
 
+def two_tags(groups):
+    """Two distinct tags, drawn with weight sqrt(size).
+
+    Uniform over tags makes a source's odds inversely proportional to how many
+    neighbours it has — an 11-source tag drowned out 1,125 (issue #10). Uniform
+    over sources instead hands 55% of every dig to ai-practice. sqrt splits the
+    difference: per-source imbalance drops from 13.8x to 3.7x, and a brand-new
+    tag of size 1 draws ~1% instead of 33%.
+    """
+    tags = list(groups)
+    weights = [len(groups[t]) ** 0.5 for t in tags]
+    t1 = random.choices(tags, weights)[0]
+    i = tags.index(t1)
+    return t1, random.choices(tags[:i] + tags[i + 1:], weights[:i] + weights[i + 1:])[0]
+
+
 def pick_pair():
     groups = by_tag()
-    tags = list(groups)
-    if len(tags) < 2:
+    if len(groups) < 2:
         raise RuntimeError(
             "Need saved sources in at least 2 different tags before digging."
         )
-    t1, t2 = random.sample(tags, 2)
+    t1, t2 = two_tags(groups)
     return random.choice(groups[t1]), random.choice(groups[t2])
 
 
 def pick_third(exclude_tags):
     groups = by_tag()
-    tags = [t for t in groups if t not in exclude_tags]
-    if not tags:
+    groups = {t: g for t, g in groups.items() if t not in exclude_tags}
+    if not groups:
         raise RuntimeError("No sources outside the original pair's tags to chain against.")
-    return random.choice(groups[random.choice(tags)])
+    tags = list(groups)
+    t = random.choices(tags, [len(groups[x]) ** 0.5 for x in tags])[0]  # same as two_tags
+    return random.choice(groups[t])
 
 
 # ---------- the digging loop ----------
@@ -211,14 +238,40 @@ def run_filter(insight):
     return results
 
 
-def keep(insight, score, pair):
-    score_str = f"{score}/10" if score is not None else "unscored"
-    # escape leading '#'s so model text can't be mistaken for a new record
-    # header by a future digest parser that splits keepers.md on "^## "
-    safe_insight = re.sub(r"(?m)^#", r"\\#", insight)
-    entry = f"## {time.strftime('%Y-%m-%d')} — {score_str} — {pair}\n\n{safe_insight}\n\n"
-    with open(ROOT / "keepers.md", "a") as f:
-        f.write(entry)
+def slugify(text, words=8):
+    first_line = next((ln for ln in text.strip().splitlines() if ln.strip()), "")
+    slug = re.sub(r"[^a-z0-9]+", "-", first_line.lower()).strip("-")
+    return "-".join(slug.split("-")[:words]) or "insight"
+
+
+def keep(insight, score, pair, tags=()):
+    """Write one Obsidian note per kept insight. Returns the path written."""
+    d = vault_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    date = time.strftime("%Y-%m-%d")
+    # ponytail: slug from the insight's own opening words — no second AI call for a title
+    stem = f"{date}-{slugify(insight)}"
+    path = d / f"{stem}.md"
+    for n in range(2, 100):  # same slug twice in a day is possible, not worth a uuid
+        if not path.exists():
+            break
+        path = d / f"{stem}-{n}.md"
+
+    # pair arrives as "A × B", or "A × B ⛓ C" after chaining — each part is a source label
+    links = " + ".join(
+        f"[[{p.strip().translate(str.maketrans('', '', '[]|#^'))}]]"
+        for p in re.split(r"[×⛓]", pair) if p.strip()
+    )
+    all_tags = dict.fromkeys(["insight", *tags])  # dedupe, keep order
+    front = [f"date: {date}", f"tags: [{', '.join(all_tags)}]"]
+    if score is not None:
+        front.insert(1, f"score: {score}")
+    # a '---' at the start of a body line would end the frontmatter block early
+    body = re.sub(r"(?m)^---$", "———", insight.strip())
+    path.write_text(
+        "---\n" + "\n".join(front) + "\n---\n\n" + body + f"\n\nDug from {links}\n"
+    )
+    return path
 
 
 # ---------- http ----------
@@ -298,8 +351,9 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/api/filter":
                 self._json({"gates": run_filter(body["insight"])})
             elif self.path == "/api/keep":
-                keep(body["insight"], body["score"], body["pair"])
-                self._json({"ok": True})
+                p = keep(body["insight"], body["score"], body["pair"],
+                         body.get("tags", []))
+                self._json({"ok": True, "note": p.name})
             else:
                 self._json({"error": "not found"}, 404)
         except Exception as e:  # surface everything to the UI
