@@ -19,7 +19,7 @@ ROOT = Path(__file__).parent
 SOURCES = ROOT / "sources"
 SOURCES.mkdir(exist_ok=True)
 TAGS = ["content-topics", "brand-frameworks", "creative-projects", "essays",
-        "ai-practice", "other"]
+        "ai-practice", "commerce", "other"]
 PORT = 8420
 
 

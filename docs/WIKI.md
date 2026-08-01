@@ -19,7 +19,7 @@ Idea Digger is built on three convictions:
    first answer is usually the obvious one — the tool's job is to refuse it.
 3. **The constraint is the design.** No database, no framework, no deploy. Plain
    files you can read, grep, and back up. If the tool died tomorrow, `sources/` and
-   `keepers.md` would still be worth keeping. That's the constraint-driven-design
+   the vault's insight notes would still be worth keeping. That's the constraint-driven-design
    brand applied to its own tooling.
 
 ---
@@ -94,9 +94,9 @@ label: Constraint-driven system design
 <original pasted text, verbatim>
 ```
 
-Header is `key: value` lines; `\n---\n` separates header from body. The six legal
+Header is `key: value` lines; `\n---\n` separates header from body. The seven legal
 tags: `content-topics`, `brand-frameworks`, `creative-projects`, `essays`,
-`ai-practice`, `other`. Tags are a closed set on purpose — the dig loop needs
+`ai-practice`, `commerce`, `other`. Tags are a closed set on purpose — the dig loop needs
 *categories to cross*, and a folksonomy would fragment into one-member tags. The
 failure mode is the opposite of the intuitive one: a one-member tag doesn't get
 ignored, it gets picked constantly, because the draw is over tags rather than
