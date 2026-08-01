@@ -168,7 +168,8 @@ function showInsight(card, d) {
 async function doKeep() {
   busy(true);
   try {
-    await api('/api/keep', {insight: current.insight, score: current.score, pair: current.pair});
+    await api('/api/keep', {insight: current.insight, score: current.score,
+                            pair: current.pair, tags: current.tags});
     current.kept = true;
     $('keep').textContent = 'Kept ✓';
   } catch (e) { alert(e.message); }

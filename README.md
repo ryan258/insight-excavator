@@ -36,7 +36,8 @@ All AI calls go through OpenRouter. The model is resolved per call:
   story premise), then scores it 1–10 on novelty. Below 7, the AI explains why it's
   obvious and generates a deeper replacement — up to 3 rounds. You see only the final
   insight, its score, and the two sources.
-- **Keep** — appends the insight to `keepers.md` with date, score, and source pair.
+- **Keep** — writes one Obsidian note per insight into your vault, with date, score,
+  tags, and `[[wikilinks]]` to the source pair. Vault path is `vault` in `config.json`.
 - **Chain** — digs the current insight against a third source from a tag not already
   in the pair.
 - **Filter** — runs the insight through the three gates, pass/fail each:
@@ -49,9 +50,9 @@ All AI calls go through OpenRouter. The model is resolved per call:
 |---|---|
 | `server.py` | The whole backend — stdlib HTTP server + OpenRouter calls |
 | `index.html` | The whole frontend |
-| `config.json` | Model name |
+| `config.json` | Model name and Obsidian `vault` path |
 | `sources/*.txt` | Your sources (`tag:` / `label:` header, then text) |
-| `keepers.md` | Kept insights (created on first Keep) |
+| `<vault>/insights/*.md` | Kept insights, one note each (folder created on first Keep) |
 | `roadmap.md` | Phase plan |
 | `docs/WIKI.md` | Full reference: architecture, API, the dig loop, design decisions |
 | `docs/HAPPY-PATH.md` | The intended workflow: feed → dig → keep → make |

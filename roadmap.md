@@ -22,9 +22,11 @@ no database. Each phase ships something usable on its own and has a "done when" 
 
 The three features specced but deferred until the core loop proved out.
 
-1. **Keep pile** — a Keep button on the insight card. Appends to `keepers.md` with
-   date, score, and the two source labels. This comes first: without it, good
-   insights evaporate on refresh.
+1. **Keep pile** — a Keep button on the insight card. Writes one Obsidian note per
+   kept insight into the vault (`vault` in `config.json`), with date, score, tags,
+   and `[[wikilinks]]` to the two source labels. This comes first: without it, good
+   insights evaporate on refresh. *(Originally appended to `keepers.md`; moved into
+   the Obsidian vault on 2026-07-31 so kept insights land where the thinking lives.)*
 2. **Chain mode** — a Chain button on a kept/current insight: dig it against a third
    source from a tag not already in the pair.
 3. **Filter mode** — run any insight through the three gates, pass/fail each with one
@@ -33,7 +35,7 @@ The three features specced but deferred until the core loop proved out.
    - BUILD: does it create proof, practice, or capacity?
    - DELIVER: does it respect the bandwidth?
 
-**Done when:** dig → keep → chain → filter works as one flow and `keepers.md` reads
+**Done when:** dig → keep → chain → filter works as one flow and the kept notes read
 like a usable idea log. ✅ Verified live 2026-07-19.
 
 ---
@@ -173,8 +175,8 @@ wildly more often than another, and tagging costs pennies.
 
 Insights are only useful if they leave the tool.
 
-1. **Weekly digest** — script that reads `keepers.md`, groups by theme, outputs one
-   markdown brief: "what you keep circling, what's ready to make."
+1. **Weekly digest** — script that reads the vault's insight notes, groups by theme,
+   outputs one markdown brief: "what you keep circling, what's ready to make."
 2. **Brand-voice handoff** — a kept insight can be sent to the existing brand-voice
    workflow as a seed for X/LinkedIn drafts (manual copy at first; automate only if
    the manual step actually gets used).

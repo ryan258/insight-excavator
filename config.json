@@ -1,3 +1,4 @@
 {
-  "model": "inclusionai/ring-2.6-1t"
+  "model": "nvidia/nemotron-nano-12b-v2-vl:free",
+  "vault": "~/Projects/vaults/main-vault/insights"
 }
