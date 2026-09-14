@@ -12,6 +12,7 @@ Decisions behind this file are in docs/research/{export-format-anatomy,
 idea-filter-sample,one-source-file}.md — read those before changing it.
 """
 import argparse
+import codecs
 import json
 import os
 import re
@@ -131,11 +132,16 @@ LABEL: if KEEP, four to six words naming the technique. If DROP, reply NONE.
 def stream_array(fp):
     """Yield elements of a top-level JSON array. Peak memory is one conversation."""
     dec = json.JSONDecoder()
+    # A read can end mid-character — the exports are full of accented letters,
+    # smart quotes and emoji. An incremental decoder holds the partial bytes
+    # until the next read completes them; a plain .decode() raised and killed
+    # the whole import.
+    utf8 = codecs.getincrementaldecoder("utf-8")()
     buf, started = "", False
     while True:
         chunk = fp.read(1 << 20)
         if chunk:
-            buf += chunk.decode("utf-8")
+            buf += utf8.decode(chunk)
         if not started:
             i = buf.find("[")
             if i < 0:

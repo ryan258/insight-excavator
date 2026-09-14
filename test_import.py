@@ -28,6 +28,19 @@ class DribbleFP:
         return out
 
 
+class SplitFP:
+    """Two reads with the break at an arbitrary byte — including mid-character."""
+
+    def __init__(self, data, cut):
+        self.parts, self.i = [data[:cut], data[cut:]], 0
+
+    def read(self, _n=None):
+        if self.i >= len(self.parts):
+            return b""
+        self.i += 1
+        return self.parts[self.i - 1]
+
+
 def test_stream_array():
     items = [{"a": 1}, {"b": [1, 2, {"c": "]"}]}, {"d": "text, with, commas"}]
     got = list(imp.stream_array(DribbleFP(json.dumps(items).encode())))
@@ -35,6 +48,12 @@ def test_stream_array():
     # a string containing ']' must not end the array early
     assert got[1]["b"][2]["c"] == "]"
     assert list(imp.stream_array(io.BytesIO(b"[]"))) == []
+
+    # a multi-byte character split across two reads must not raise
+    accented = [{"a": "caf\u00e9 \u201csmart\u201d \U0001f600"}]
+    raw = json.dumps(accented, ensure_ascii=False).encode()
+    for cut in range(1, len(raw)):          # every possible boundary, incl. mid-char
+        assert list(imp.stream_array(SplitFP(raw, cut))) == accented, cut
 
 
 def test_chatgpt_walk_prunes_dead_branches():
