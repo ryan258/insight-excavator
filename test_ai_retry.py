@@ -7,6 +7,7 @@ No network: urlopen is swapped for a scripted list of responses.
 import io
 import json
 import os
+import urllib.error
 import urllib.request
 
 os.environ.setdefault("OPENROUTER_API_KEY", "test")
@@ -27,7 +28,10 @@ def run(responses):
 
     def fake_urlopen(req, timeout=None):
         calls.append(1)
-        return _Resp(json.dumps(responses[len(calls) - 1]).encode())
+        r = responses[len(calls) - 1]
+        if isinstance(r, Exception):
+            raise r
+        return _Resp(json.dumps(r).encode())
 
     real_urlopen, real_sleep = urllib.request.urlopen, server.time.sleep
     urllib.request.urlopen = fake_urlopen
@@ -46,6 +50,13 @@ null = {"choices": [{"message": {"content": None}}, ]}
 err504 = {"error": {"code": 504, "message": "Upstream idle timeout exceeded"}}
 err402 = {"error": {"code": 402, "message": "requires more credits"}}
 err429 = {"error": {"code": 429, "message": "rate limited"}}
+
+
+def http(code, msg):
+    """A real HTTP status, not a 200 carrying an error body."""
+    return urllib.error.HTTPError(
+        "u", code, msg, {}, io.BytesIO(json.dumps({"error": {"message": msg}}).encode())
+    )
 
 # a transient 504 is retried, and the next good response is returned
 out, n = run([err504, ok])
@@ -67,8 +78,31 @@ assert isinstance(out, RuntimeError), out
 assert "504" in str(out), out
 assert n == 3, n
 
+# an error payload with no code at all is reported, not retried
+out, n = run([{"error": {"message": "nope"}}, ok])
+assert isinstance(out, RuntimeError) and "nope" in str(out), out
+assert n == 1, f"an uncoded error should not retry, made {n} calls"
+
 # the pre-existing content:null retry still works
 out, n = run([null, ok])
 assert out == "hello" and n == 2, (out, n)
 
-print("ok — 5 checks passed")
+# persistent nulls raise after exhausting retries
+out, n = run([null, null, null])
+assert isinstance(out, RuntimeError) and "no content" in str(out), out
+assert n == 3, f"persistent nulls should try 3 times, made {n} calls"
+
+
+# the same rule applies to a real HTTP status: 429 is transient, 402 is not
+out, n = run([http(429, "rate limited"), ok])
+assert out == "hello", out
+assert n == 2, f"HTTP 429 should be retried, made {n} calls"
+
+out, n = run([http(503, "upstream down"), http(503, "upstream down"), ok])
+assert out == "hello" and n == 3, (out, n)
+
+out, n = run([http(402, "requires more credits"), ok])
+assert isinstance(out, RuntimeError) and "402" in str(out), out
+assert n == 1, f"HTTP 402 should not retry, made {n} calls"
+
+print("ok — 11 checks passed")

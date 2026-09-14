@@ -38,6 +38,11 @@ def vault_dir():
     return Path(config()["vault"]).expanduser()
 
 
+def transient(code):
+    """5xx and 429 are worth another try; a 4xx like 402 (out of credits) never is."""
+    return isinstance(code, int) and (code >= 500 or code == 429)
+
+
 def ai(prompt, tries=3):
     req = urllib.request.Request(
         "https://openrouter.ai/api/v1/chat/completions",
@@ -61,6 +66,11 @@ def ai(prompt, tries=3):
                 msg = err_json.get("error", {}).get("message", err_body)
             except Exception:
                 msg = err_body
+            # A real HTTP status gets the same treatment as the 200-with-error-body
+            # case below — OpenRouter sends the identical failure both ways.
+            if transient(e.code) and attempt < tries - 1:
+                time.sleep(2 ** attempt)
+                continue
             raise RuntimeError(f"OpenRouter HTTP {e.code}: {msg}")
         if "choices" not in data:
             # A 200 carrying an error body instead of choices. Free-tier
@@ -69,8 +79,7 @@ def ai(prompt, tries=3):
             # succeed on a retry, so only back off on 5xx and 429.
             err = data.get("error", data)
             code = err.get("code") if isinstance(err, dict) else None
-            if isinstance(code, int) and (code >= 500 or code == 429) \
-                    and attempt < tries - 1:
+            if transient(code) and attempt < tries - 1:
                 time.sleep(2 ** attempt)
                 continue
             raise RuntimeError(f"OpenRouter error: {err}")
@@ -137,6 +146,11 @@ def by_tag():
     return groups
 
 
+def draw_tag(groups, tags):
+    """One tag out of `tags`, drawn with weight sqrt(size). See two_tags."""
+    return random.choices(tags, [len(groups[t]) ** 0.5 for t in tags])[0]
+
+
 def two_tags(groups):
     """Two distinct tags, drawn with weight sqrt(size).
 
@@ -146,11 +160,8 @@ def two_tags(groups):
     difference: per-source imbalance drops from 13.8x to 3.7x, and a brand-new
     tag of size 1 draws ~1% instead of 33%.
     """
-    tags = list(groups)
-    weights = [len(groups[t]) ** 0.5 for t in tags]
-    t1 = random.choices(tags, weights)[0]
-    i = tags.index(t1)
-    return t1, random.choices(tags[:i] + tags[i + 1:], weights[:i] + weights[i + 1:])[0]
+    t1 = draw_tag(groups, list(groups))
+    return t1, draw_tag(groups, [t for t in groups if t != t1])
 
 
 def pick_pair():
@@ -168,9 +179,7 @@ def pick_third(exclude_tags):
     groups = {t: g for t, g in groups.items() if t not in exclude_tags}
     if not groups:
         raise RuntimeError("No sources outside the original pair's tags to chain against.")
-    tags = list(groups)
-    t = random.choices(tags, [len(groups[x]) ** 0.5 for x in tags])[0]  # same as two_tags
-    return random.choice(groups[t])
+    return random.choice(groups[draw_tag(groups, list(groups))])
 
 
 # ---------- the digging loop ----------
@@ -251,11 +260,16 @@ def keep(insight, score, pair, tags=()):
     date = time.strftime("%Y-%m-%d")
     # ponytail: slug from the insight's own opening words — no second AI call for a title
     stem = f"{date}-{slugify(insight)}"
-    path = d / f"{stem}.md"
-    for n in range(2, 100):  # same slug twice in a day is possible, not worth a uuid
-        if not path.exists():
+    # O_EXCL rather than exists(): two threads keeping the same slug at once both
+    # get a file, and the suffix is uncapped
+    n = 1
+    while True:
+        path = d / (f"{stem}.md" if n == 1 else f"{stem}-{n}.md")
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
             break
-        path = d / f"{stem}-{n}.md"
+        except FileExistsError:
+            n += 1
 
     # pair arrives as "A × B", or "A × B ⛓ C" after chaining — each part is a source label
     links = " + ".join(
