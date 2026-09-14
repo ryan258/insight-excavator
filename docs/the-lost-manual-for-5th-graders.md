@@ -54,7 +54,7 @@ The program is only a few files. You could print them out.
 | `index.html` | The screen you look at. Buttons, text boxes. | The dashboard |
 | `config.json` | One line saying *which* robot to use. | The dial |
 | `sources/` | A folder holding all your notes, one note per file. | The shoebox |
-| `keepers.md` | The ideas you liked enough to save. | The trophy shelf |
+| `<vault>/*.md` | The ideas you liked enough to save, one note each. | The trophy shelf |
 | `import.py` | A separate tool that dumps thousands of old chats into the shoebox. | The dump truck |
 
 **There is no database.** That word means "a special locked filing cabinet that
@@ -100,7 +100,7 @@ paragraph you liked.
 
 The program asks the robot two questions about it:
 
-1. **"Which pile does this go in?"** The robot picks one of five labels (called
+1. **"Which pile does this go in?"** The robot picks one of seven labels (called
    **tags**). More on those in section 7.
 2. **"Give this a short name."** About five words, so you can tell notes apart.
 
@@ -122,8 +122,9 @@ This is the button the whole program exists for.
 
 ### KEEP — save the good ones
 
-Adds the idea to `keepers.md` with today's date, its score, and which two notes made
-it. Without this button, a good idea disappears the moment you reload the page.
+Saves the idea as a note in your Obsidian vault with today's date, its score, tags,
+and links to the notes that made it. Without this button, a good idea disappears
+the moment you reload the page.
 
 ### CHAIN — go one step further
 
@@ -185,15 +186,17 @@ low score and move on.
 
 ## 7. Tags, and why "different piles" matters so much
 
-Every note gets exactly one tag out of five:
+Every note gets exactly one tag out of seven:
 
 | Tag | Meaning | How many notes have it right now |
 | --- | --- | --- |
-| `creative-projects` | Stories, comics, shows, things being made | 467 |
-| `content-topics` | Things worth writing or posting about | 262 |
-| `essays` | Longer arguments and thinking | 100 |
-| `brand-frameworks` | Ways of explaining the work | 81 |
-| `other` | Didn't fit anywhere | 11 |
+| `ai-practice` | Lessons, workflows, and prompts for AI | 1,128 |
+| `creative-projects` | Stories, comics, shows, things being made | 459 |
+| `content-topics` | Things worth writing or posting about | 260 |
+| `essays` | Longer arguments and thinking | 101 |
+| `brand-frameworks` | Ways of explaining the work | 67 |
+| `commerce` | Physical goods sold to real customers | 32 |
+| `other` | Didn't fit anywhere | 0 |
 
 Tags aren't for tidiness. **Tags are the rule that makes digging work.** The program
 takes two *different* tags, then one note from each. That guarantee — that the two
@@ -202,11 +205,11 @@ of obvious.
 
 Two notes from the same pile would already be related. Where's the fun in that?
 
-> **A real wrinkle worth knowing.** The program picks a *pile* first, then a note
-> from inside it. So a pile holding 11 notes gets chosen just as often as a pile
-> holding 467. That means each of those 11 lonely `other` notes shows up *way* more
-> often than any single `creative-projects` note. It's a known quirk, written down
-> in the project's plans, not yet fixed.
+> **A real wrinkle worth knowing.** The program doesn't pick tags completely equally,
+> and it doesn't pick notes purely at random across all files. Instead, it weights each
+> pile by the square root of how many notes are in it. That way, huge piles (like
+> `ai-practice`) don't completely swallow every dig, and smaller piles (like `commerce`
+> or `brand-frameworks`) still show up often enough without overwhelming the mix.
 
 ---
 

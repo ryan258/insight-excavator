@@ -8,7 +8,8 @@ no database. Each phase ships something usable on its own and has a "done when" 
 
 ## Phase 0 — Core loop ✅ (shipped)
 
-- Paste → AI tags (one of 5 tags) + 5-word label → saved as plain text in `/sources`
+- Paste → AI tags (one of a closed set, five at the time; `ai-practice` and
+  `commerce` were added later) + 5-word label → saved as plain text in `/sources`
 - Tag correction dropdown
 - Dig: pick two sources from different tags → non-obvious connection → novelty
   scoring loop (rewrite until 7+, max 3 rounds) → show insight + score + source pair
@@ -149,11 +150,11 @@ Only matters once the corpus is big (post Phase 2). Phase 2's research turned up
 two defects that land here — both will be visible on the first ingest, and
 neither is a bug in `import.py`.
 
-0. **Fix `pick_pair()`'s uniform tag sampling.** `random.sample(tags, 2)` draws
-   *tags*, then one source within the chosen tag — so a tag holding 5 sources is
-   drawn as often as one holding 2,000. Once ~540 imported files land in seven
-   tags, the five existing hand-written sources will be dug hundreds of times more
-   often than any imported one. This is now the first thing to fix, not the third.
+0. **Fix `pick_pair()`'s uniform tag sampling.** ✅ (shipped) `random.sample(tags, 2)`
+   drew *tags* uniformly, then one source within the chosen tag — so a small tag
+   drowned out big ones. Fixed via $\sqrt{\text{size}}$ weighted sampling
+   (`two_tags` and `draw_tag` in `server.py`), dropping per-source imbalance
+   from 13.8x to 3.7x (issue #10).
 1. **No repeat pairs** — log dug pairs to `dug.log`; picker skips already-dug combos
    until all are exhausted.
 2. **Dig against this** — pick one specific source, let the tool find its partner.

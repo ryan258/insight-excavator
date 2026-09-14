@@ -74,8 +74,8 @@ When a dig lands, hit **Keep** before doing anything else. Insights not kept are
 gone on the next dig — that's deliberate (one results card at a time keeps the tool
 honest), so the Keep button is the only memory.
 
-Keep bar: *"Would I be annoyed to lose this?"* Not "is this clever." `keepers.md`
-should be a file you'd defend in a fire, not a scroll of everything that scored 7.
+Keep bar: *"Would I be annoyed to lose this?"* Not "is this clever." Vault notes
+should be entries you'd defend in a fire, not a scroll of everything that scored 7.
 
 **Chain** when an insight feels 80% there — it re-digs the insight against a third
 tag family, which either deepens it or productively breaks it. **Filter** when you
@@ -84,7 +84,7 @@ premise failing all three gates is still a story premise.
 
 ## 4. MAKE — the only stage that counts
 
-Once a week, open `keepers.md` and pick **one** entry to turn into something real: an
+Once a week, open your vault notes and pick **one** entry to turn into something real: an
 essay draft, a post via the brand-voice workflow, a project note, a comic premise.
 
 This stage is manual on purpose (roadmap Phase 4 automates the digest only after the
@@ -102,7 +102,7 @@ minute 1   paste 1–2 new sources since last time (feed before you dig)
 minute 2   dig × 6, reading each pair before its insight arrives
 minute 8   2 keeps, 1 chain that broke something open, 3 passes
 minute 9   filter the keep that smells like brand material
-minute 10  close the laptop; keepers.md is two entries richer
+minute 10  close the laptop; your vault is two notes richer
 ```
 
 ## Anti-patterns
@@ -110,7 +110,7 @@ minute 10  close the laptop; keepers.md is two entries richer
 | Anti-pattern | Why it hurts |
 |---|---|
 | Digging with 4 sources | Same pairs repeat; you'll conclude the tool is dull when the corpus is |
-| Keeping everything ≥7 | `keepers.md` becomes noise and the weekly MAKE stage dies |
+| Keeping everything ≥7 | The vault becomes noise and the weekly MAKE stage dies |
 | Cheap model for real sessions | You'll read jargon soup and blame the idea |
 | Feeding summaries instead of the real text | The model digs what you give it; thin sources make thin insights |
 | Skipping the MAKE stage | The tool becomes a slot machine — entertaining, output-free |

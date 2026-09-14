@@ -9,7 +9,8 @@ never faked.
 Conventions used throughout:
 
 - Server running: `export OPENROUTER_API_KEY=sk-or-... && python3 server.py` → `http://localhost:8420`
-- The five tags: `content-topics`, `brand-frameworks`, `creative-projects`, `essays`, `other`
+- The tags: `content-topics`, `brand-frameworks`, `creative-projects`, `essays`,
+  `ai-practice`, `commerce`, `other`
 - The judge threshold is 7/10, max 3 rounds; sub-7 after 3 rounds is shown honestly
 - The seven endpoints: `/api/save`, `/api/retag`, `/api/pick`, `/api/insight`, `/api/chain`, `/api/filter`, `/api/keep`
 - Each dig costs 2–4 model calls — mind `config.json` before batch demos
@@ -157,7 +158,7 @@ Show that tags are the entire organizational scheme.
 **The moment:** the realization that the taxonomy is five words and a grep away — no tag manager, no UI for it, none needed.
 
 ### 14. The fixed-taxonomy defense
-Demo *why* there are exactly five tags and no custom ones.
+Demo *why* the tag set is closed and no custom ones are allowed.
 
 **Setup:** none beyond a running server.
 **Run:**

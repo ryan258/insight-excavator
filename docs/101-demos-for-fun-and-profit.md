@@ -9,7 +9,8 @@ real; where sample output would help, only its shape is described, never faked.
 Conventions:
 
 - Server running: `export OPENROUTER_API_KEY=sk-or-... && python3 server.py` → `http://localhost:8420`
-- Tags: `content-topics`, `brand-frameworks`, `creative-projects`, `essays`, `other`
+- Tags: `content-topics`, `brand-frameworks`, `creative-projects`, `essays`,
+  `ai-practice`, `commerce`, `other`
 - Judge threshold 7/10, max 3 rounds; each dig is 2–4 model calls — cheap model for anything batch or party-paced
 - Endpoints: `/api/save`, `/api/retag`, `/api/pick`, `/api/insight`, `/api/chain`, `/api/filter`, `/api/keep`
 - "Headless" means the curl recipes from `DEMOS.md`

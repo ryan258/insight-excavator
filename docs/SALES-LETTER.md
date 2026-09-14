@@ -54,9 +54,9 @@ It won't make you creative. It's a shovel, not a muse.
 Maybe one dig in three is worth keeping. That's the honest hit rate — good odds
 across a session, lottery odds for a single pull.
 
-And it won't do the last step for you. Once a week, you open `keepers.md` and turn
-one entry into something real. That file is the product. The app is just how it
-gets filled.
+And it won't do the last step for you. Once a week, you open your vault and turn
+one entry into something real. Those notes are the product. The app is just how
+they get filled.
 
 ## Why it's built this way
 
@@ -77,6 +77,6 @@ export OPENROUTER_API_KEY=sk-or-...
 python3 server.py        # → http://localhost:8420
 ```
 
-If `keepers.md` is empty after a week, delete the folder. You've lost nothing.
+If your vault folder is empty after a week, delete the folder. You've lost nothing.
 
 If it isn't, you already know.

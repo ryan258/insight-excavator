@@ -4,7 +4,8 @@ A local web app that finds non-obvious, usable connections across everything you
 made — brand frameworks, creative projects, content topics, essays. Paste sources in,
 hit **Dig**, get a novelty-scored insight from two sources that don't normally touch.
 
-No database. No dependencies. Three files and a folder of plain text.
+No database. No dependencies. The app is two files — `server.py` and
+`index.html` — plus a folder of plain text.
 
 ## Run it
 
@@ -28,16 +29,18 @@ All AI calls go through OpenRouter. The model is resolved per call:
 ## How it works
 
 - **Save** — paste any text. The AI assigns one tag (`content-topics`,
-  `brand-frameworks`, `creative-projects`, `essays`, `other`) and a short label.
-  A dropdown lets you correct the tag. Each source is a plain text file in
-  `sources/` with the tag and label at the top.
+  `brand-frameworks`, `creative-projects`, `essays`, `ai-practice`, `commerce`,
+  `other`) and a short label. A dropdown lets you correct the tag. Each source
+  is a plain text file in `sources/` with the tag and label at the top.
 - **Dig** — picks two sources from *different* tags, asks the AI for a non-obvious
   connection that produces something usable (essay angle, framework, product idea,
   story premise), then scores it 1–10 on novelty. Below 7, the AI explains why it's
   obvious and generates a deeper replacement — up to 3 rounds. You see only the final
   insight, its score, and the two sources.
 - **Keep** — writes one Obsidian note per insight into your vault, with date, score,
-  tags, and `[[wikilinks]]` to the source pair. Vault path is `vault` in `config.json`.
+  tags, and `[[wikilinks]]` to the source pair. `vault` in `config.json` is the
+  folder the notes are written into — set it to the subfolder you want, not the
+  vault root.
 - **Chain** — digs the current insight against a third source from a tag not already
   in the pair.
 - **Filter** — runs the insight through the three gates, pass/fail each:
@@ -50,11 +53,38 @@ All AI calls go through OpenRouter. The model is resolved per call:
 |---|---|
 | `server.py` | The whole backend — stdlib HTTP server + OpenRouter calls |
 | `index.html` | The whole frontend |
-| `config.json` | Model name and Obsidian `vault` path |
+| `config.json` | Model name and the `vault` folder kept notes are written to |
 | `sources/*.txt` | Your sources (`tag:` / `label:` header, then text) |
-| `<vault>/insights/*.md` | Kept insights, one note each (folder created on first Keep) |
+| `<vault>/*.md` | Kept insights, one note each (folder created on first Keep) |
 | `roadmap.md` | Phase plan |
+
+Bulk tools, run from the command line, not part of the web app:
+
+| File | What |
+|---|---|
+| `import.py` | Bulk-import ChatGPT and Claude chat exports into `sources/` |
+| `retag_commerce.py` | One-off pass that moved existing sources into the `commerce` tag |
+
+Self-checks — no network, no API key needed. Run each with `python3 <file>`:
+
+| File | What it covers |
+|---|---|
+| `test_ai_retry.py` | Which OpenRouter failures `ai()` retries and which it gives up on |
+| `test_http.py` | Every endpoint, plus the cross-origin guard |
+| `test_import.py` | The export parsers and their documented traps |
+| `test_keep.py` | Vault notes and tag-weighted sampling |
+
+Docs:
+
+| File | What |
+|---|---|
 | `docs/WIKI.md` | Full reference: architecture, API, the dig loop, design decisions |
 | `docs/HAPPY-PATH.md` | The intended workflow: feed → dig → keep → make |
 | `docs/DEMOS.md` | Worked examples from real sessions + headless curl recipes |
 | `docs/PHASE-3-4-PICKUP.md` | Handoff notes for the not-yet-built phases |
+| `docs/100-brilliant-demos.md` | 100 ways to demo the tool, scripted in full |
+| `docs/101-demos-for-fun-and-profit.md` | 101 ways to *use* it — 50 for fun, 50 for profit |
+| `docs/SALES-LETTER.md` | The pitch, for anyone who needs one |
+| `docs/the-lost-manual-for-5th-graders.md` | The whole thing explained without jargon |
+| `docs/agents/issue-tracker.md` | Where issues live and how to work them |
+| `docs/research/*.md` | What the import build measured and settled |

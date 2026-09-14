@@ -31,7 +31,7 @@ index.html  ──fetch──▶  server.py  ──HTTPS──▶  OpenRouter  �
     ▲                       │
  one page,             stdlib only,
  vanilla JS            reads/writes ▼
-              sources/*.txt   config.json   <vault>/insights/*.md
+              sources/*.txt   config.json   <vault>/*.md
 ```
 
 Three files, one folder. Everything on disk is human-readable text.
@@ -40,9 +40,9 @@ Three files, one folder. Everything on disk is human-readable text.
 |---|---|
 | `server.py` | The whole backend: `ThreadingHTTPServer` on `127.0.0.1:8420`, flat route table in `do_POST`, one OpenRouter call site (`ai()`) |
 | `index.html` | The whole frontend: vanilla JS, no build step, DOM-node rendering (no `innerHTML` for dynamic values — model output is untrusted) |
-| `config.json` | Two fields: the model slug and the Obsidian `vault` path |
+| `config.json` | Two fields: the model slug and `vault` — the folder notes are written into, not the vault root |
 | `sources/*.txt` | The corpus |
-| `<vault>/insights/*.md` | The output — one Obsidian note per insight that survived your judgment |
+| `<vault>/*.md` | The output — one Obsidian note per insight that survived your judgment |
 
 ### Concurrency & safety notes
 
@@ -104,7 +104,7 @@ sources. See the sampling note under `/api/pick` below.
 
 ### Keeper note (one file per insight, in the vault)
 
-`<vault>/insights/YYYY-MM-DD-<slug-of-first-line>.md`:
+`<vault>/YYYY-MM-DD-<slug-of-first-line>.md`:
 
 ```
 ---
@@ -217,7 +217,7 @@ the brand thesis, not quality.
 | Chain says no sources outside the pair's tags | You need a third populated tag to chain |
 | Port already in use on start | A previous instance is alive: `lsof -nP -iTCP:8420` then `kill <pid>` |
 | Costs | Tagging is one small call; a dig is 2–4 calls (connect + 1–3 judges); filter is 1. A cheap model in `config.json` makes testing near-free; use a strong model for real digs |
-| Backup | `sources/` + the vault's `insights/` is the entire state. Copy them anywhere |
+| Backup | `sources/` + the `vault` folder is the entire state. Copy them anywhere |
 
 ## Design decisions log
 
