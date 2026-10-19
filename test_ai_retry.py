@@ -31,7 +31,7 @@ def run(responses):
         r = responses[len(calls) - 1]
         if isinstance(r, Exception):
             raise r
-        return _Resp(json.dumps(r).encode())
+        return _Resp(r if isinstance(r, bytes) else json.dumps(r).encode())
 
     real_urlopen, real_sleep = urllib.request.urlopen, server.time.sleep
     urllib.request.urlopen = fake_urlopen
@@ -105,4 +105,66 @@ out, n = run([http(402, "requires more credits"), ok])
 assert isinstance(out, RuntimeError) and "402" in str(out), out
 assert n == 1, f"HTTP 402 should not retry, made {n} calls"
 
-print("ok — 11 checks passed")
+# network-level failures never reach the HTTPError branch; they must retry too
+out, n = run([urllib.error.URLError("connection refused"), ok])
+assert out == "hello" and n == 2, (out, n)
+
+out, n = run([TimeoutError("timed out")] * 3)
+assert isinstance(out, RuntimeError) and "unreachable" in str(out), out
+assert n == 3, f"a persistent timeout should try 3 times, made {n}"
+
+# a body cut off mid-JSON is transient as well
+out, n = run([b'{"choices": [{"mess', ok])
+assert out == "hello" and n == 2, (out, n)
+
+# an empty `choices` list is an upstream error, not an IndexError
+out, n = run([{"choices": []}, ok])
+assert isinstance(out, RuntimeError) and n == 1, (out, n)
+
+# data_collection in config.json is forwarded to OpenRouter; absent, it is not sent
+sent = []
+
+def spy(req, timeout=None):
+    sent.append(json.loads(req.data))
+    return _Resp(json.dumps(ok).encode())
+
+real_urlopen, real_config = urllib.request.urlopen, server.config
+urllib.request.urlopen = spy
+try:
+    server.config = lambda: {"model": "m", "data_collection": "deny"}
+    server.ai("hi")
+    server.config = lambda: {"model": "m"}
+    server.ai("hi")
+finally:
+    urllib.request.urlopen, server.config = real_urlopen, real_config
+assert sent[0]["provider"] == {"data_collection": "deny"}, sent[0]
+assert "provider" not in sent[1], sent[1]
+
+# cheap_model and temperature are forwarded, and usage is logged for the ledger
+sent.clear()
+with_usage = {"choices": [{"message": {"content": "x"}},],
+              "usage": {"prompt_tokens": 7, "completion_tokens": 3, "cost": 0.25}}
+
+def spy_usage(req, timeout=None):
+    sent.append(json.loads(req.data))
+    return _Resp(json.dumps(with_usage).encode())
+
+m = os.environ.pop("M", None)
+real_urlopen, real_config = urllib.request.urlopen, server.config
+urllib.request.urlopen = spy_usage
+server._tl.calls = []
+try:
+    server.config = lambda: {"model": "strong", "cheap_model": "weak", "temperature": 1.1}
+    server.ai("hi")
+    server.ai("hi", cheap=True)
+    calls = server._tl.calls
+finally:
+    server._tl.calls = None
+    urllib.request.urlopen, server.config = real_urlopen, real_config
+    if m:
+        os.environ["M"] = m
+assert [x["model"] for x in sent] == ["strong", "weak"] and sent[0]["temperature"] == 1.1, sent
+assert calls == [{"model": "strong", "in": 7, "out": 3, "cost": 0.25},
+                 {"model": "weak", "in": 7, "out": 3, "cost": 0.25}], calls
+
+print("ok")

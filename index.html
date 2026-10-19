@@ -36,8 +36,8 @@
     display: inline-block; font-family: system-ui, sans-serif; font-size: 14px;
     background: #ede8df; border-radius: 999px; padding: .2rem .9rem; margin-right: .5rem;
   }
-  .sources { display: flex; gap: 1rem; }
-  .sources > div { flex: 1; }
+  .sources { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .sources > div { flex: 1 1 14rem; }
   .label { font-style: italic; }
   .score { font-family: system-ui, sans-serif; font-weight: 700; font-size: 15px;
            color: #6b5d43; margin-bottom: .8rem; }
@@ -46,11 +46,37 @@
   .error { color: #a33; font-family: system-ui, sans-serif; font-size: 16px; }
   .gate { font-family: system-ui, sans-serif; font-size: 16px; margin-top: .5rem; }
   .acts button { margin-right: .6rem; }
+  #toast:empty { display: none; }
+  #why { width: 100%; font: inherit; font-family: system-ui, sans-serif; font-size: 16px;
+         padding: .5rem .8rem; margin-top: 1rem; border: 1px solid #ccc; border-radius: 8px;
+         background: #fff; }
+  .hint { font-family: system-ui, sans-serif; font-size: 14px; margin: -2rem 0 2rem; }
+  kbd { font-family: ui-monospace, monospace; font-size: .85em; border: 1px solid #bbb;
+        border-radius: 4px; padding: 0 .3rem; }
+  button:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 3px solid #4a7bd0; outline-offset: 2px; }
+  @media (prefers-color-scheme: dark) {
+    :root { color-scheme: dark; }
+    body { background: #17161a; color: #e8e4dc; }
+    textarea, .card, select, #why { background: #1f1e23; border-color: #3a3840; color: inherit; }
+    .tagchip { background: #2e2c33; }
+    h2, h2 label { color: #a9a49a; }
+    .muted { color: #a09b92; }
+    .score { color: #cdb98a; }
+    .error { color: #ff8a8a; }
+    button { background: #e8e4dc; color: #17161a; }
+    kbd { border-color: #555; }
+  }
 </style>
 </head>
 <body>
 <main>
 <h1>Idea Digger</h1>
+<div id="toast" class="error" role="alert"></div>
+<p class="muted hint" id="progress" aria-live="polite"></p>
+<p class="muted hint">Keys: <kbd>D</kbd> dig · <kbd>K</kbd> keep · <kbd>M</kbd> maybe ·
+  <kbd>S</kbd> skip &amp; dig next · <kbd>C</kbd> chain · <kbd>F</kbd> filter ·
+  <kbd>⌘/Ctrl+Enter</kbd> save a source</p>
 
 <h2><label for="text">Add a source</label></h2>
 <textarea id="text" placeholder="Paste any text source…"></textarea>
@@ -68,13 +94,20 @@ const $ = id => document.getElementById(id);
 // All model-generated text (labels, insights, gate reasons, errors) is rendered
 // via textContent / DOM nodes — never string-interpolated into innerHTML.
 
-async function api(path, body) {
-  const r = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'},
-                              body: JSON.stringify(body || {})});
-  const data = await r.json();
+async function call(path, opts) {
+  let r, data;
+  try {
+    r = await fetch(path, opts);
+    data = await r.json();
+  } catch (e) {
+    throw new Error('Cannot reach the server — is `python3 server.py` still running?');
+  }
   if (!r.ok) throw new Error(data.error || 'Request failed');
   return data;
 }
+const api = (path, body) => call(path, {method: 'POST', headers: {'Content-Type': 'application/json'},
+                                        body: JSON.stringify(body || {})});
+const getJSON = path => call(path);
 
 function el(tag, className, text) {
   const e = document.createElement(tag);
@@ -87,15 +120,31 @@ function errorCard(container, msg) {
   container.replaceChildren(el('div', 'card error', msg));
 }
 
+// non-blocking error line for actions that have no card of their own
+function toast(msg) { $('toast').textContent = msg; }
+
+let TAGS = []; // the closed tag set, learned from any response that carries it
+
+// the roadmap's gate: 30 graded digs before the tool earns its next feature
+async function refreshStats() {
+  try {
+    const d = await getJSON('/api/stats');
+    $('progress').textContent = `${d.graded} of ${d.target} digs graded · ${d.keep} kept · ` +
+      `${d.maybe} maybe · ${d.skip} skipped · ${d.digs} dug in all`;
+  } catch (e) { /* the counter is a convenience */ }
+}
+
 // one action at a time — serializes dig/keep/chain/filter so responses
 // can't land in a card that has since been replaced
 function busy(v) {
-  for (const id of ['dig', 'save', 'keep', 'chain', 'filter']) {
+  if (v) toast('');
+  for (const id of ['dig', 'save', 'why', 'keep', 'maybe', 'skip', 'chain', 'filter']) {
     const b = $(id);
     if (b) b.disabled = v;
   }
-  // an already-kept insight must not become keepable again
-  if (!v && current && current.kept && $('keep')) $('keep').disabled = true;
+  // an already-graded insight must not be graded twice
+  if (!v && current && current.graded)
+    for (const id of ['why', 'keep', 'maybe', 'skip']) if ($(id)) $(id).disabled = true;
 }
 
 // ---------- save ----------
@@ -106,6 +155,7 @@ $('save').onclick = async () => {
   try {
     const d = await api('/api/save', {text: $('text').value});
     $('text').value = '';
+    TAGS = d.tags;
     const card = el('div', 'card');
     card.append('Saved as ', el('span', 'label', d.label), document.createElement('br'), 'Tag: ');
     const sel = document.createElement('select');
@@ -116,8 +166,9 @@ $('save').onclick = async () => {
       sel.append(o);
     }
     sel.onchange = () => api('/api/retag', {file: d.file, tag: sel.value})
-      .catch(e => alert(e.message));
+      .catch(e => toast(e.message));
     card.append(sel);
+    if (d.clipped) card.append(el('p', 'muted', 'Long source — the model sees only the start of it.'));
     $('saveResult').replaceChildren(card);
   } catch (e) {
     errorCard($('saveResult'), e.message);
@@ -127,20 +178,35 @@ $('save').onclick = async () => {
 
 // ---------- dig / keep / chain / filter ----------
 
-let current = null; // {insight, score, tags, pair}
+let current = null; // {insight, score, tags, pair, files, dig, graded}
 
-function sourceChip(s) {
+// A source with a file gets an editable tag: misfiled imports are noticed here,
+// mid-dig, and the dropdown is the only correction tool for the 2,000 imported
+// sources. setTag keeps the card's tag list (chain exclusions, note tags) in step.
+function sourceChip(s, setTag) {
   const div = document.createElement('div');
-  div.append(el('span', 'tagchip', s.tag), document.createElement('br'),
-             el('span', 'label', s.label));
+  let tag = el('span', 'tagchip', s.tag);
+  if (s.file && setTag && TAGS.length) {
+    tag = document.createElement('select');
+    tag.setAttribute('aria-label', `Tag for ${s.label}`);
+    for (const t of TAGS) {
+      const o = el('option', '', t);
+      o.selected = t === s.tag;
+      tag.append(o);
+    }
+    tag.onchange = () => api('/api/retag', {file: s.file, tag: tag.value})
+      .then(() => { s.tag = tag.value; setTag(s.tag); })
+      .catch(e => { tag.value = s.tag; toast(e.message); });
+  }
+  div.append(tag, document.createElement('br'), el('span', 'label', s.label));
   return div;
 }
 
 // build the card: sources shown first, insight arrives later
-function showCard(sources) {
+function showCard(sources, setters) {
   const card = el('div', 'card');
   const holder = el('div', 'sources');
-  sources.forEach(s => holder.append(sourceChip(s)));
+  sources.forEach((s, i) => holder.append(sourceChip(s, setters && setters[i])));
   card.append(holder,
               el('p', 'muted working', 'Digging…'),
               el('div', 'islot'), el('div', 'acts'), el('div', 'extra'));
@@ -151,13 +217,23 @@ function showCard(sources) {
 function showInsight(card, d) {
   card.querySelector('.working').remove();
   const slot = card.querySelector('.islot');
-  slot.replaceChildren(el('div', 'score', d.score == null ? 'NOVELTY — unscored' : `NOVELTY ${d.score}/10`),
+  // the judge is the same model that wrote the insight, so this is a self-rating
+  slot.replaceChildren(el('div', 'score', d.score == null ? 'SELF-RATED NOVELTY — unscored' : `SELF-RATED NOVELTY ${d.score}/10`),
                        el('div', 'insight', d.insight));
   const acts = card.querySelector('.acts');
   acts.replaceChildren();
-  for (const [id, label, fn] of [['keep', 'Keep', doKeep],
-                                 ['chain', 'Chain', doChain],
-                                 ['filter', 'Filter', doFilter]]) {
+  const why = el('input');
+  why.id = 'why';
+  why.type = 'text';
+  why.maxLength = 200;
+  why.placeholder = 'Why? (optional — saved with your grade)';
+  why.setAttribute('aria-label', 'Why this grade');
+  acts.append(why, document.createElement('br'));
+  for (const [id, label, fn] of [['keep', 'Keep (K)', doKeep],
+                                 ['maybe', 'Maybe (M)', () => doGrade('maybe')],
+                                 ['skip', 'Skip (S)', () => doGrade('skip', true)],
+                                 ['chain', 'Chain (C)', doChain],
+                                 ['filter', 'Filter (F)', doFilter]]) {
     const b = el('button', '', label);
     b.id = id;
     b.onclick = fn;
@@ -168,12 +244,28 @@ function showInsight(card, d) {
 async function doKeep() {
   busy(true);
   try {
-    await api('/api/keep', {insight: current.insight, score: current.score,
-                            pair: current.pair, tags: current.tags});
-    current.kept = true;
+    const d = await api('/api/keep', {insight: current.insight, score: current.score,
+                                      pair: current.pair, tags: current.tags,
+                                      files: current.files, dig: current.dig, why: $('why').value});
+    current.graded = true;
     $('keep').textContent = 'Kept ✓';
-  } catch (e) { alert(e.message); }
+    $('keep').title = d.note;
+    refreshStats();
+  } catch (e) { toast(e.message); }
   busy(false);
+}
+
+// maybe / skip are data too: they calibrate the self-rated judge. Skip moves on.
+async function doGrade(grade, next) {
+  busy(true);
+  try {
+    await api('/api/grade', {dig: current.dig, grade, why: $('why').value});
+    current.graded = true;
+    $(grade).textContent = grade === 'maybe' ? 'Maybe ✓' : 'Skipped ✓';
+    refreshStats();
+  } catch (e) { toast(e.message); }
+  busy(false);
+  if (next && current.graded) doDig();
 }
 
 async function doChain() {
@@ -183,11 +275,14 @@ async function doChain() {
   busy(true);
   extra.replaceChildren(el('p', 'muted', 'Chaining…'));
   try {
-    const d = await api('/api/chain', {insight: prev.insight, exclude: prev.tags});
-    current = {insight: d.insight, score: d.score,
-               tags: [...prev.tags, d.source.tag],
-               pair: `${prev.pair} ⛓ ${d.source.label}`};
-    const newCard = showCard([{tag: 'insight', label: 'previous insight'}, d.source]);
+    const d = await api('/api/chain', {insight: prev.insight, exclude: prev.tags, dig: prev.dig});
+    TAGS = d.tags;
+    const tags = [...prev.tags, d.source.tag];
+    current = {insight: d.insight, score: d.score, tags,
+               pair: `${prev.pair} ⛓ ${d.source.label}`,
+               files: [...prev.files, d.source.file], dig: d.dig};
+    const newCard = showCard([{tag: 'insight', label: 'previous insight'}, d.source],
+                             [null, t => { tags[tags.length - 1] = t; }]);
     showInsight(newCard, d);
   } catch (e) {
     // keep the existing insight card intact; just report the failure
@@ -215,21 +310,57 @@ async function doFilter() {
   busy(false);
 }
 
-$('dig').onclick = async () => {
+async function doDig() {
   busy(true);
   try {
     const p = await api('/api/pick');
-    const card = showCard([p.a, p.b]);
+    TAGS = p.tags;
+    const tags = [p.a.tag, p.b.tag]; // shared with current, so a retag mid-dig sticks
+    const card = showCard([p.a, p.b], [t => { tags[0] = t; }, t => { tags[1] = t; }]);
     const d = await api('/api/insight', {a: p.a.file, b: p.b.file});
-    current = {insight: d.insight, score: d.score,
-               tags: [p.a.tag, p.b.tag],
-               pair: `${p.a.label} × ${p.b.label}`};
+    current = {insight: d.insight, score: d.score, tags,
+               pair: `${p.a.label} × ${p.b.label}`,
+               files: [p.a.file, p.b.file], dig: d.dig};
     showInsight(card, d);
+    refreshStats();
   } catch (e) {
     errorCard($('digResult'), e.message);
   }
   busy(false);
-};
+}
+$('dig').onclick = doDig;
+
+// ---------- keyboard ----------
+// Typing in a field is never hijacked; only Cmd/Ctrl+Enter in the source box saves.
+document.addEventListener('keydown', e => {
+  if (e.target.matches('textarea, input, select')) {
+    if (e.target.id === 'text' && e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !$('save').disabled) {
+      e.preventDefault();
+      $('save').click();
+    }
+    return;
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const id = {d: 'dig', k: 'keep', m: 'maybe', s: 'skip', c: 'chain', f: 'filter'}[e.key.toLowerCase()];
+  const b = id && $(id);
+  if (b && !b.disabled) { e.preventDefault(); b.click(); }
+});
+
+// ---------- start-up: counter, and the last dig if it was never graded ----------
+(async () => {
+  refreshStats();
+  try {
+    const d = await getJSON('/api/last');
+    if (!d.dig || d.grade) return;
+    const row = d.dig;
+    current = {insight: row.insight, score: row.score, tags: row.tags, pair: row.pair,
+               files: row.files, dig: row.dig};
+    const card = showCard(row.sources);
+    showInsight(card, row);
+    card.querySelector('.extra').replaceChildren(
+      el('p', 'muted', 'Restored from your last session — grade it, or dig again.'));
+  } catch (e) { /* nothing to restore */ }
+})();
 </script>
 </body>
 </html>
