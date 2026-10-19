@@ -54,8 +54,9 @@ When a pair scores low twice, stop digging it — feed the corpus instead.
 > system measures current "capacity state," converts tasks into testable deliverable
 > units, and enforces feasibility gates with automatic scope degradation…
 
-**Step 2, keep:** appended to `keepers.md` as
-`## 2026-07-19 — 8/10 — <pair>`.
+**Step 2, keep:** written as one note in the vault (`2026-07-19-<slug>.md`), with the
+score, tags and `sources:` in its frontmatter. (This demo predates the vault; it
+originally appended to a `keepers.md` file.)
 
 **Step 3, chain** (excluding the pair's two tags, so the third source had to come
 from `creative-projects` — Botsly): scored 7/10 →
@@ -113,8 +114,14 @@ curl -s -X POST localhost:8420/api/filter -d '{"insight": "<insight text>"}'
 
 # keep
 curl -s -X POST localhost:8420/api/keep \
-  -d '{"insight": "<text>", "score": 8, "pair": "label A × label B"}'
+  -d '{"insight": "<text>", "score": 8, "pair": "label A × label B",
+       "tags": ["essays", "commerce"], "files": ["<file A>", "<file B>"]}'
+# score is an int 1-10 or null; tags must come from the closed set; files are optional
+# source filenames and are written to the note's `sources:` frontmatter
 ```
+
+Errors are real HTTP statuses: 400 for a bad request, 409 when the corpus can't serve
+it yet, 502 when OpenRouter fails — see the status table in `WIKI.md`.
 
 A ten-dig batch session in one line of shell:
 
@@ -145,4 +152,5 @@ The 90-second version:
    called it non-obvious — below 7 gets rejected and rewritten, three strikes and
    it shows you the honest failure."
 4. Hit Chain. "Now it takes what it found and forces it through a third category."
-5. Open `keepers.md`. "This file is the product. The app is just the shovel."
+5. Open the vault's insights folder. "These notes are the product. The app is just
+   the shovel."

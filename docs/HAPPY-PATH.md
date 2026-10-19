@@ -24,8 +24,9 @@ export OPENROUTER_API_KEY=sk-or-...
 python3 server.py        # → http://localhost:8420
 ```
 
-Before a real session, check `config.json` points at a strong model
-(e.g. `anthropic/claude-opus-4.8`). Cheap models make shallow, jargon-dense digs —
+Before a real session, check `config.json`'s `model` is a strong one — it runs the
+dig, the judge and the filter — and put a cheap one in `cheap_model` for tagging.
+(`config.example.json` ships with a flash model, which is cheap and fine for testing plumbing.) Cheap models make shallow, jargon-dense digs —
 fine for testing plumbing, bad for actual insight.
 
 ## 1. FEED — build a corpus worth colliding
@@ -48,16 +49,18 @@ half-formed content angle, an essay draft, a good paragraph from an old chat.
   tags are the collision categories.
 
 A corpus of 15–20 well-spread sources is where digging starts getting interesting.
-(Phase 2 of the roadmap bulk-imports your chat-history exports for exactly this
-reason.)
+(Phase 2 bulk-imported the chat-history exports for exactly this reason — the corpus
+is now ~2,000 sources. Almost all of them are model-paraphrased chat, so paste your
+own writing in too: hand-written sources are the ones the tool was built around.)
 
 ## 2. DIG — in sessions, not single pulls
 
 Digging works best as a deliberate session: 5–10 digs in a sitting, not one dig in
 passing. Reasons:
 
-- Any single dig is a lottery ticket. The hit rate is maybe 1-in-3 worth keeping —
-  fine odds over a session, discouraging odds for a single pull.
+- Any single dig is a lottery ticket. The real hit rate is not known yet: the old
+  "1 in 3" came from a 3-source corpus. Grade your first 30 digs (Keep / Maybe / Skip)
+  and the counter at the top becomes the measurement.
 - **Read the pair before the insight arrives.** The UI shows the two sources first
   on purpose. Spend that moment guessing the connection yourself — when the model's
   answer beats your guess, that's a real find; when your guess beats the model's,
@@ -70,9 +73,10 @@ passing. Reasons:
 
 ## 3. KEEP — ruthlessly, immediately
 
-When a dig lands, hit **Keep** before doing anything else. Insights not kept are
-gone on the next dig — that's deliberate (one results card at a time keeps the tool
-honest), so the Keep button is the only memory.
+Grade every dig: **Keep** (`K`), **Maybe** (`M`) or **Skip** (`S`, which also digs the
+next pair). One card shows at a time, but nothing is lost: every dig is in `digs.jsonl`,
+and an ungraded one comes back after a refresh. Keep is the only grade that writes a
+vault note; the other two are data for judging the judge.
 
 Keep bar: *"Would I be annoyed to lose this?"* Not "is this clever." Vault notes
 should be entries you'd defend in a fire, not a scroll of everything that scored 7.

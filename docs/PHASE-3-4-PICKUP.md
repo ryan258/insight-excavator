@@ -10,14 +10,19 @@ Read `roadmap.md` first for the *why*; this file is the *how/where*.
   `keep`, `by_tag`, `pick_pair`, `pick_third` are the whole domain layer.
   Routes live in `Handler.do_POST` as a flat if/elif chain.
 - `index.html` — one page, vanilla JS, `api(path, body)` helper, `current` object
-  holds the active insight `{insight, score, tags, pair}`.
+  holds the active insight `{insight, score, tags, pair, files, dig, graded}`.
 - State on disk only: `sources/*.txt` (tag/label header + text), plus one Obsidian
-  note per kept insight in `<vault>/insights/` (`vault` in `config.json`).
+  note per kept insight in the folder named by `vault` in `config.json`, plus `digs.jsonl`,
+  the append-only dig ledger (dig and grade rows; see `WIKI.md`).
 - Model comes from `M` env var or `config.json`, re-read per call.
 
-**Prerequisite check:** Phase 2 (`import.py`, bulk chat-export ingestion) should be
-done before Phase 3 matters — repeat-pair avoidance is pointless with a dozen sources.
-If Phase 2 hasn't happened, do it first; its spec is in `roadmap.md`.
+**Prerequisite check:** Phase 2 is done (2,047 sources). Before building any of this,
+read `roadmap.md` § Backlog: it re-orders and gates the work on one real MAKE cycle,
+and notes that repeat-pair avoidance is low value at this corpus size.
+
+Error handling now has a vocabulary: `ValueError` → 400, `NotReady` → 409,
+`FileNotFoundError` → 404, `RuntimeError` from `ai()` → 502, anything else → 500.
+Raise the matching one from new routes instead of returning a status by hand.
 
 ## Phase 3 — Smarter digging
 
@@ -26,9 +31,8 @@ If Phase 2 hasn't happened, do it first; its spec is in `roadmap.md`.
    the docstring on `two_tags()` before touching either; the naive fixes in both
    directions are worse. Check: `python3 test_keep.py`.
 
-1. **No repeat pairs**
-   - Append `"{a_file}|{b_file}"` (sorted) to `dug.log` at the end of `/api/insight`.
-   - In `pick_pair()`, load the set and reject picked pairs that are in it; after
+1. **No repeat pairs** (the ledger exists now; `digs.jsonl` rows carry `files`, so no separate log)
+   - In `pick_pair()`, build the set of sorted `files` pairs from `ledger_state()` and reject picked pairs that are in it; after
      N failed attempts (say 20), fall back to allowing repeats — never hard-fail
      a dig because the corpus is exhausted.
 2. **Dig against this**
@@ -36,10 +40,7 @@ If Phase 2 hasn't happened, do it first; its spec is in `roadmap.md`.
      from any *other* tag. UI: smallest possible affordance — a text input or a
      "dig this" button next to the save confirmation. Don't build a source browser
      unless Ryan asks.
-3. **Cost tiering**
-   - `config.json` grows a second field: `{"model": ..., "cheap_model": ...}`.
-   - `ai(prompt, cheap=False)`; `classify()` and Phase 2's import filter pass
-     `cheap=True`. `dig`/`run_filter` stay on the strong model.
+3. **Cost tiering** ✅ *(done 2026-10-18)* — `cheap_model` in `config.json`; `ai(prompt, cheap=True)` is used by `classify()` and `import.py`. `dig`/`run_filter` stay on `model`.
 
 **Done when:** 50 digs, no repeated pair, tagging runs on the cheap model.
 

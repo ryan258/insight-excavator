@@ -1,5 +1,11 @@
 # 101 Demos for Fun and Profit
 
+> **Written before the vault move (2026-07-31).** Wherever this file says `keepers.md`,
+> read "the vault's insights folder" (`vault` in `config.json`: one note per kept
+> insight); a recipe that `grep`s `keepers.md` becomes `grep -r <pattern> <vault>/`.
+> These are scripts, not transcripts, and none has been run against the 2,000-source
+> corpus yet.
+
 The companion to `100-brilliant-demos.md`. That file teaches the tool; this one
 *uses* it — fifty demos for fun (games, stunts, play), fifty for profit (pipelines,
 client plays, products), and one grand finale. Same rules as before: these are

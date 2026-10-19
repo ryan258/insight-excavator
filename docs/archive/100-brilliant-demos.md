@@ -1,5 +1,10 @@
 # 100 Brilliant Demos
 
+> **Written before the vault move (2026-07-31).** Wherever this file says `keepers.md`,
+> read "the vault's insights folder" (`vault` in `config.json`: one note per kept
+> insight). Shell recipes that `tail` or `grep` `keepers.md` become, for example,
+> `grep -rl evergreen <vault>/`. The corpus is also no longer 3 sources.
+
 One hundred ways to demo Idea Digger, each in full detail: the setup, the exact
 steps, and the moment that lands. Unlike `DEMOS.md` (transcripts from real
 sessions), these are *scripts* — run any of them against the live tool and the

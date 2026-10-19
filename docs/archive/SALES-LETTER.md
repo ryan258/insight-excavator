@@ -44,7 +44,7 @@ Ten minutes a session. A few cents of API calls.
 Not a subscription. Not a platform. Not another inbox to feel behind on.
 
 Three files and a folder of plain text, on your own machine. If the tool died
-tomorrow, your sources and your keep file would still be there — readable, greppable,
+tomorrow, your sources and your kept notes would still be there — readable, greppable,
 yours. Most tools hold your thinking hostage. This one couldn't if it tried.
 
 ## What it won't do
