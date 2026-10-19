@@ -126,6 +126,30 @@ def test_one_line_flattens_header_values():
     assert len(imp.one_line("x" * 500)) == 200
 
 
+def test_user_only_drops_assistant_turns():
+    got = imp.user_only([("user", "a"), ("assistant", "b"), ("user", "c")])
+    assert got == [("user", "a"), ("user", "c")], got
+    assert imp.user_only([("assistant", "only the model spoke")]) == []
+
+
+def test_verdict_parse_failure_is_not_a_decision():
+    import server
+    conv = {"title": "t", "msgs": [("user", "a belief")]}
+    server.classify = lambda t: ("essays", "l")
+    for reply, want in (("VERDICT: KEEP\nIDEA: x", "KEEP"), ("**VERDICT:** Keep\n**IDEA:** x", "KEEP"),
+                        ("verdict: drop\nIDEA: NONE", "DROP")):
+        server.ai = lambda p, tries=3, r=reply, **kw: r
+        assert imp.judge(conv)[0] == want, reply
+    for reply in ("", "I think this is interesting", "VERDICT: maybe"):
+        server.ai = lambda p, tries=3, r=reply, **kw: r
+        for fn in (imp.judge, imp.judge_technique):
+            try:
+                fn(conv)
+                raise AssertionError(f"{fn.__name__} logged a decision for {reply!r}")
+            except ValueError:
+                pass
+
+
 def test_load_seen(tmp: Path):
     log = tmp / "seen.log"
     log.write_text("chatgpt abc KEEP\nclaude def DROP\n\nbad\n")
@@ -140,6 +164,8 @@ def main():
     test_chatgpt_drops_tools_system_and_keeps_multimodal_strings()
     test_claude_joins_text_blocks_and_ignores_dot_text()
     test_one_line_flattens_header_values()
+    test_user_only_drops_assistant_turns()
+    test_verdict_parse_failure_is_not_a_decision()
     with tempfile.TemporaryDirectory() as d:
         test_load_seen(Path(d))
     print("ok")

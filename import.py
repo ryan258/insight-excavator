@@ -217,11 +217,18 @@ def claude_messages(conv):
     return out
 
 
-def conversations():
+def user_only(msgs):
+    """The filter reads user turns and nothing else. Dropping the assistant turns
+    here, not later, is what keeps ~3,400 pending conversations in memory: they are
+    five sixths of the text."""
+    return [m for m in msgs if m[0] == "user"]
+
+
+def conversations(chatgpt_zip=CHATGPT_ZIP, claude_zip=CLAUDE_ZIP):
     """Yield every conversation in both exports as a uniform dict."""
-    with zipfile.ZipFile(CHATGPT_ZIP) as z, z.open("conversations.json") as f:
+    with zipfile.ZipFile(chatgpt_zip) as z, z.open("conversations.json") as f:
         for conv in stream_array(f):
-            msgs = chatgpt_messages(conv)
+            msgs = user_only(chatgpt_messages(conv))
             if msgs:
                 ts = conv.get("create_time")
                 yield {
@@ -234,9 +241,9 @@ def conversations():
                     ),
                     "msgs": msgs,
                 }
-    with zipfile.ZipFile(CLAUDE_ZIP) as z, z.open("conversations.json") as f:
+    with zipfile.ZipFile(claude_zip) as z, z.open("conversations.json") as f:
         for conv in stream_array(f):
-            msgs = claude_messages(conv)
+            msgs = user_only(claude_messages(conv))
             if msgs:
                 yield {
                     "src": "claude",
@@ -256,8 +263,17 @@ def user_text(conv):
 
 
 def field(raw, key):
-    m = re.search(rf"^{key}:\s*(.+)$", raw, re.M)
-    return m.group(1).strip() if m else ""
+    return server.field(raw, key) or ""
+
+
+def verdict_of_reply(raw):
+    """KEEP or DROP. A reply with neither is a parse failure, not a decision:
+    raising leaves the conversation unlogged so the next run retries it, instead
+    of writing a permanent DROP for a reply we could not read."""
+    v = server.field(raw, "VERDICT")
+    if v is None or not v.upper().startswith(("KEEP", "DROP")):
+        raise ValueError(f"no VERDICT in reply: {raw[:80]!r}")
+    return v.upper()[:4]
 
 
 def one_line(s, limit=200):
@@ -273,8 +289,8 @@ def judge(conv):
     raw = server.ai(PROMPT.format(
         title=conv["title"] or "(untitled)",
         user_text=user_text(conv),
-    ))
-    if not field(raw, "VERDICT").upper().startswith("KEEP"):
+    ), cheap=True)
+    if verdict_of_reply(raw) != "KEEP":
         return "DROP", "", "", ""
     idea = field(raw, "IDEA")
     if not idea or idea.upper() in ("NONE", "THIN"):
@@ -292,8 +308,8 @@ def judge_technique(conv):
     raw = server.ai(TECHNIQUE_PROMPT.format(
         title=conv["title"] or "(untitled)",
         user_text=user_text(conv),
-    ))
-    if not field(raw, "VERDICT").upper().startswith("KEEP"):
+    ), cheap=True)
+    if verdict_of_reply(raw) != "KEEP":
         return "DROP", "", "", ""
     tech = field(raw, "TECHNIQUE")
     if not tech or tech.upper() in ("NONE", "THIN"):
@@ -313,7 +329,8 @@ def write_source(out_dir, conv, idea, tag, label):
         f"date: {conv['date']}\n"
         f"conv: {conv['id']}\n"
         f"title: {one_line(conv['title'])}\n"
-        f"---\n{idea}\n"
+        f"---\n{idea}\n",
+        encoding="utf-8",
     )
     return path.name
 
@@ -338,6 +355,10 @@ def main():
              "(observed 10%%, 18%%, 30%% on consecutive blocks of 40).",
     )
     ap.add_argument("--out", type=Path, default=ROOT / "sources")
+    ap.add_argument("--chatgpt", type=Path, default=CHATGPT_ZIP,
+                    help="the ChatGPT export zip (default: the swapped-name file in ~/Downloads)")
+    ap.add_argument("--claude", type=Path, default=CLAUDE_ZIP,
+                    help="the Claude export zip (default: the swapped-name file in ~/Downloads)")
     ap.add_argument("--log", type=Path, default=None)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument(
@@ -351,8 +372,12 @@ def main():
     if args.log is None:
         args.log = TECH_LOG if args.technique else SEEN_LOG
 
+    server.load_env()
     if not os.environ.get("OPENROUTER_API_KEY"):
         raise SystemExit("Set OPENROUTER_API_KEY first.")
+    for z in (args.chatgpt, args.claude):
+        if not z.exists():
+            raise SystemExit(f"{z} not found — pass --chatgpt and --claude.")
     args.out.mkdir(parents=True, exist_ok=True)
 
     seen = load_seen(args.log)
@@ -370,7 +395,7 @@ def main():
         print(f"technique pass over {len(targets)} conversations the idea filter dropped")
 
     pending = []
-    for conv in conversations():
+    for conv in conversations(args.chatgpt, args.claude):
         if conv["id"] in seen:
             continue
         if targets is not None and conv["id"] not in targets:

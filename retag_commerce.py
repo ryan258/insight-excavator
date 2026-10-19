@@ -9,6 +9,8 @@ without it. This asks one yes/no question per source and rewrites the `tag:` hea
 the yeses. It only ever moves files INTO commerce — a `no` leaves the file untouched,
 so an existing good tag can never be churned by this pass.
 
+FINISHED 2026-08-01 (2,046 judged, 32 moved) — kept for `--undo`, not for re-running.
+
 Resumable and reversible: every verdict is appended to retag-commerce.log and skipped
 on re-run, and `--undo` puts every moved file back using the old tag recorded there.
 """
@@ -67,15 +69,6 @@ def ask(src):
     return out.strip().upper().startswith("YES")
 
 
-def set_tag(name, tag):
-    """Rewrite only the `tag:` header line, leaving every other byte alone."""
-    path = server.SOURCES / name
-    head, sep, body = path.read_text().partition("\n---\n")
-    lines = [f"tag: {tag}" if ln.startswith("tag: ") else ln
-             for ln in head.splitlines()]
-    path.write_text("\n".join(lines) + sep + body)
-
-
 def load_seen():
     if not LOG.exists():
         return set()
@@ -87,7 +80,7 @@ def undo():
         raise SystemExit(f"{LOG.name} not found — nothing to undo.")
     moved = [ln.split() for ln in LOG.read_text().splitlines() if " YES " in ln]
     for name, _verdict, old_tag in moved:
-        set_tag(name, old_tag)
+        server.set_tag(name, old_tag)
     print(f"put {len(moved)} files back")
 
 
@@ -129,7 +122,7 @@ def main():
                 print(f"  ERR {name}: {e}", file=sys.stderr)
             return
         if yes and not args.dry_run:
-            set_tag(name, "commerce")
+            server.set_tag(name, "commerce")
         with lock:
             counts["YES" if yes else "NO"] += 1
             if not args.dry_run:
